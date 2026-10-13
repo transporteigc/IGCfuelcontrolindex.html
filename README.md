@@ -1,2 +1,2 @@
-# IGCfuelcontrolindex.html
-IGCfuelcontrolindex.html
+# index.html
+index.html
