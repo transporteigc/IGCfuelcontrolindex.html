@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IGC FUEL CONTROL · Conciliación de kilometraje</title>
+<link rel="icon" id="fav">
+<style>
+:root{
+  --bg:#f4f6f9;--card:#fff;--ink:#1c2430;--muted:#64708a;--line:#dde3ec;--brand:#0b3d6e;--brand2:#e8a317;
+  --ok:#1e8e4e;--okbg:#e3f5ea;--warn:#a86b00;--warnbg:#fff3d6;--bad:#c0262d;--badbg:#fde4e5;--na:#5b6577;--nabg:#eceff4;
+  --grid:#e1e0d9;--axis:#c3c2b7;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0f141b;--card:#171e28;--ink:#e6ebf3;--muted:#98a4ba;--line:#2b3544;--brand:#5aa2e6;--brand2:#e8a317;
+  --ok:#4cc27e;--okbg:#143324;--warn:#f0b43c;--warnbg:#3a2d0c;--bad:#ff7b80;--badbg:#401a1c;--na:#a5afc2;--nabg:#232c39;
+  --grid:#2c2c2a;--axis:#383835;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--brand);color:#fff;padding:14px 16px 0}
+
+header h1{margin:0;font-size:18px;letter-spacing:.3px}
+header small{opacity:.8}
+nav{display:flex;gap:4px;overflow-x:auto;margin-top:10px}
+nav button{background:transparent;color:#d6e4f5;border:0;padding:10px 14px;border-radius:8px 8px 0 0;cursor:pointer;font:inherit;white-space:nowrap}
+nav button.on{background:var(--bg);color:var(--ink);font-weight:600}
+main{max-width:1240px;margin:0 auto;padding:16px}
+section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:16px}
+.card h3{margin:14px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:3px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=checkbox]{width:auto}
+.chk{display:flex;align-items:center;gap:8px;padding-top:22px}
+.chk label{margin:0;color:var(--ink);font-size:14px}
+button.btn{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font:inherit}
+@media (prefers-color-scheme:dark){button.btn{background:#2a6db3}}
+button.btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.btn.dng{background:var(--bad);color:#fff}
+button.btn.sm{padding:4px 9px;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.tbl th{font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
+.tbl td.n,.tbl th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tbl tr.click{cursor:pointer}.tbl tr.click:hover{background:var(--nabg)}.tbl tr.sel{background:var(--nabg)}
+.tbl tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.wrap{overflow-x:auto}
+.chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.chip.ok{background:var(--okbg);color:var(--ok)}.chip.warn{background:var(--warnbg);color:var(--warn)}
+.chip.crit,.chip.err{background:var(--badbg);color:var(--bad)}.chip.na{background:var(--nabg);color:var(--na)}
+.banner{border-radius:10px;padding:12px 14px;border:1px solid var(--line);margin-bottom:10px}
+.banner.ok{background:var(--okbg)}.banner.warn{background:var(--warnbg)}.banner.crit,.banner.err{background:var(--badbg)}.banner.na{background:var(--nabg)}
+.banner b{font-size:16px}
+.msg{font-size:13.5px;margin:4px 0 0}
+.muted{color:var(--muted)}
+.flow{display:flex;gap:6px;flex-wrap:wrap;align-items:stretch;margin:6px 0 10px}
+.flow div{background:var(--nabg);border-radius:8px;padding:7px 10px;font-size:13px}
+.flow i{align-self:center;font-style:normal;color:var(--muted)}
+.concl{background:var(--nabg);border-left:4px solid var(--brand2);padding:12px 14px;border-radius:6px;font-size:14.5px}
+.thumb{width:84px;height:62px;object-fit:cover;border-radius:6px;border:1px solid var(--line);cursor:pointer}
+.warnline{font-size:13px;margin-top:4px}
+.bad{color:var(--bad)}.good{color:var(--ok)}
+.kpis{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));margin:6px 0 4px}
+.kpi{background:var(--nabg);border-radius:10px;padding:10px 12px}
+.kpi span{display:block;font-size:12px;color:var(--muted)}
+.kpi b{display:block;font-size:21px;margin:2px 0}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);max-width:min(92vw,720px)}
+dialog img{max-width:100%;border-radius:8px}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1c2430;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:9;max-width:90vw}
+.small{font-size:12.5px}
+.chartbox{position:relative;height:300px}
+.alerta{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.alerta:hover{background:var(--nabg)}
+@media (max-width:640px){main{padding:10px}.card{padding:12px}}
+header{background:#002e42!important}
+.hd{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.hd img{height:50px}.hd h1{font-size:17px}
+#sync{font-size:12px;margin-left:auto}
+nav button.on{border-bottom:3px solid #d4881a}
+body.locked header,body.locked main{display:none}
+#login{display:none;position:fixed;inset:0;background:#002e42;align-items:center;justify-content:center;z-index:99;padding:16px}
+body.locked #login{display:flex}
+#login form{background:var(--card);padding:20px;border-radius:12px;width:min(92vw,360px)}
+#login img{width:100%;border-radius:8px;margin-bottom:12px}
+#login .err{color:var(--bad);font-size:13px;min-height:18px;margin:6px 0}
+.xl{display:flex;justify-content:flex-end;margin-bottom:8px}
+</style>
+</head>
+<body class="locked">
+<div id="login"><form id="f-login" autocomplete="off"><img data-logo alt="Transporte IGC"><label>Usuario</label><input id="lg-u" required><label style="margin-top:8px">Contraseña</label><input id="lg-p" type="password" required><div class="err" id="lg-err"></div><button class="btn" style="width:100%" type="submit">Ingresar</button></form></div>
+<header>
+  <div class="hd"><img data-logo alt="Transporte IGC"><div><h1>IGC FUEL CONTROL</h1><small>Conciliación de kilometraje · TRANSPORTE IGC S.A.S.</small></div><span id="sync">● Sin conexión a Google Sheets</span><button class="btn sec sm" id="logout" type="button" style="color:#fff;border-color:#4a6a80">Salir</button></div>
+  <nav id="nav">
+    <button data-tab="resumen" class="on">Conciliación</button>
+    <button data-tab="tanqueos">Tanqueos y odómetro</button>
+    <button data-tab="viajes">Viajes</button>
+    <button data-tab="preop">Preoperacional</button>
+    <button data-tab="facturas">Facturas</button>
+    <button data-tab="satrack">Informe Satrack</button>
+    <button data-tab="gerencial">Gerencial</button>
+    <button data-tab="config">Configuración</button>
+  </nav>
+</header>
+<main>
+
+<!-- ============ CONCILIACIÓN ============ -->
+<section id="tab-resumen" class="on">
+  <div class="card">
+    <h2>Consulta mensual de combustible</h2>
+    <div class="row">
+      <div style="min-width:170px"><label>Mes</label><select id="m-mes"></select></div>
+      <div style="min-width:190px"><label>Vista</label>
+        <select id="m-vista">
+          <option value="compania">Compañía (análisis general)</option>
+          <option value="vehiculo">Por vehículo</option>
+          <option value="conductor">Por conductor</option>
+          <option value="ruta">Por ruta</option>
+        </select></div>
+      <div style="min-width:190px"><label>Kilómetros base del análisis</label><select id="m-base" class="sel-base"></select></div>
+    </div>
+    <div id="m-out" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <h2>Períodos entre tanqueos</h2>
+    <p class="muted small" style="margin-top:0">Cada período va de un tanqueo full al siguiente tanqueo full del mismo vehículo. Seleccione una fila para ver la conciliación completa. El sistema compara las fuentes; no concluye por sí solo que exista manipulación, fraude o irregularidad.</p>
+    <div class="wrap"><table class="tbl" id="tbl-periodos"></table></div>
+    <div id="vacio-periodos" class="muted"></div>
+  </div>
+  <div id="detalle"></div>
+</section>
+
+<!-- ============ TANQUEOS ============ -->
+<section id="tab-tanqueos">
+  <div class="card">
+    <h2 id="t-titulo">Registrar tanqueo</h2>
+    <form id="f-tanqueo" autocomplete="off">
+      <div class="grid">
+        <div><label>Fecha *</label><input type="date" id="t-fecha" required></div>
+        <div><label>Hora *</label><input type="time" id="t-hora" required></div>
+        <div><label>Vehículo (placa) *</label><input id="t-placa" list="dl-placas" placeholder="SZW818" required style="text-transform:uppercase"></div>
+        <div><label>Conductor *</label><input id="t-conductor" list="dl-cond" required></div>
+        <div><label>Lectura del odómetro (km) *</label><input type="number" id="t-odo" min="0" step="1" required></div>
+        <div><label>Galones tanqueados *</label><input type="number" id="t-gal" min="0" step="0.01" required></div>
+        <div><label>Precio por galón (COP)</label><input type="number" id="t-precio" min="0" step="1"><div id="t-total" class="small muted"></div></div>
+        <div><label>Km Satrack del intervalo (opcional)</label><input type="number" id="t-sat" min="0" step="1" placeholder="desde el tanqueo anterior"></div>
+        <div><label>Horas de ralentí del intervalo (opcional)</label><input type="number" id="t-ralenti" min="0" step="0.1"></div>
+        <div class="chk"><input type="checkbox" id="t-full" checked><label for="t-full">Tanqueo full</label></div>
+      </div>
+      <datalist id="dl-placas"></datalist><datalist id="dl-cond"></datalist>
+      <p class="muted small" style="margin:6px 0 0">Satrack entrega los km recorridos en cada intervalo (arranca en 0), no un acumulado. Si sube el informe de Satrack en su pestaña, no es necesario digitar estos dos campos.</p>
+      <div id="t-live" class="warnline"></div>
+      <div class="grid" style="margin-top:10px">
+        <div>
+          <label>Foto del odómetro</label>
+          <div class="row">
+            <button type="button" class="btn sec sm" id="b-odo-up">📷 SUBIR FOTO DEL ODÓMETRO</button>
+            <button type="button" class="btn sec sm" id="b-odo-cam">📷 TOMAR FOTO</button>
+          </div>
+          <input type="file" accept="image/*" id="i-odo-up" hidden>
+          <input type="file" accept="image/*" capture="environment" id="i-odo-cam" hidden>
+          <div id="p-odo" class="small muted" style="margin-top:6px"></div>
+        </div>
+        <div>
+          <label>Foto del comprobante de combustible</label>
+          <div class="row">
+            <button type="button" class="btn sec sm" id="b-comp-up">📷 SUBIR COMPROBANTE</button>
+            <button type="button" class="btn sec sm" id="b-comp-cam">📷 TOMAR FOTO</button>
+          </div>
+          <input type="file" accept="image/*" id="i-comp-up" hidden>
+          <input type="file" accept="image/*" capture="environment" id="i-comp-cam" hidden>
+          <div id="p-comp" class="small muted" style="margin-top:6px"></div>
+        </div>
+        <div style="grid-column:1/-1"><label>Observaciones</label><textarea id="t-obs" rows="2"></textarea></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" type="submit" id="t-guardar">Guardar tanqueo</button>
+        <button class="btn sec" type="button" id="t-cancelar" hidden>Cancelar edición</button>
+      </div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Registros de tanqueo</h2>
+    <div class="wrap"><table class="tbl" id="tbl-tanqueos"></table></div>
+  </div>
+</section>
+
+<!-- ============ VIAJES ============ -->
+<section id="tab-viajes">
+  <div class="card">
+    <h2>Registrar viaje</h2>
+    <form id="f-viaje" autocomplete="off">
+      <div class="grid">
+        <div><label>Salida (fecha y hora) *</label><input type="datetime-local" id="v-salida" required></div>
+        <div><label>Vehículo (placa) *</label><input id="v-placa" list="dl-placas" required style="text-transform:uppercase"></div>
+        <div><label>Conductor</label><input id="v-cond" list="dl-cond"></div>
+        <div><label>Ruta *</label><select id="v-ruta"></select></div>
+        <div id="v-otra-w" hidden><label>Nombre de la ruta (no catalogada) *</label><input id="v-ruta-otra"></div>
+        <div><label>Número de viajes realizados por esta ruta *</label><input type="number" id="v-nv" min="1" step="1" value="1" required></div>
+        <div><label>Remisión(es) del viaje</label><input id="v-remision" placeholder="N.º del documento de cargue; separe con coma si son varias"></div>
+        <div><label>Distancia de ruta estándar por viaje (km) *</label><input type="number" id="v-kmruta" min="0" step="0.1" required></div>
+        <div><label>Odómetro inicial (km)</label><input type="number" id="v-oi" min="0" step="1"></div>
+        <div><label>Odómetro final (km)</label><input type="number" id="v-of" min="0" step="1"></div>
+        <div><label>Km recorridos según Satrack</label><input type="number" id="v-sat" min="0" step="0.1"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div id="v-vacio" class="warnline muted" style="flex-basis:100%" hidden>Aún no hay rutas creadas. Créelas en Configuración → Rutas estándar o use "Otra ruta".</div>
+        <div id="v-live" class="warnline" style="flex-basis:100%"></div>
+        <button class="btn" type="submit">Guardar viaje</button>
+        <button class="btn sec" type="button" id="v-otra">Guardar y agregar otra ruta del mismo día</button>
+        <button class="btn sec" type="button" id="v-cancelar" hidden>Cancelar edición</button>
+      </div>
+      <p class="muted small" style="margin:8px 0 0">Odómetro y Satrack se digitan como totales de este registro (todos los viajes de esta ruta). La distancia estándar se multiplica por el número de viajes.</p>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Rutas realizadas por día y vehículo</h2>
+    <div id="viajes-dia"></div>
+  </div>
+  <div class="card">
+    <h2>Distancia por viaje</h2>
+    <div id="viajes-host"></div>
+  </div>
+</section>
+
+<!-- ============ PREOPERACIONAL ============ -->
+<section id="tab-preop">
+  <div class="card">
+    <h2>Medición del chequeo preoperacional</h2>
+    <p class="muted small" style="margin-top:0">Registre la lectura de kilometraje que se toma al vehículo cada vez que sale a laborar (chequeo preoperacional). Se usa como punto de referencia adicional y se compara con el odómetro, Satrack y las rutas estándar en cada período de tanqueo.</p>
+    <form id="f-pre" autocomplete="off"><div class="grid">
+      <div><label>Fecha y hora de salida *</label><input type="datetime-local" id="pr-fecha" required></div>
+      <div><label>Vehículo (placa) *</label><input id="pr-placa" list="dl-placas" required style="text-transform:uppercase"></div>
+      <div><label>Conductor</label><input id="pr-cond" list="dl-cond"></div>
+      <div><label>Km de la medición *</label><input type="number" id="pr-km" min="0" step="1" required></div>
+      <div><label>Observación</label><input id="pr-obs"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn" type="submit">Guardar medición</button><button class="btn sec" type="button" id="pr-imp">Importar desde Excel / CSV</button><input type="file" id="pr-file" accept=".csv,.txt,.xlsx,.xls" hidden></div>
+    <p class="muted small">Importación: columnas Fecha (con hora), Placa, Conductor (opcional) y Km.</p></form>
+  </div>
+  <div class="card"><h2>Mediciones registradas</h2><div class="wrap"><table class="tbl" id="tbl-pre"></table></div></div>
+</section>
+
+<!-- ============ FACTURAS ============ -->
+<section id="tab-facturas">
+  <div class="card">
+    <h2>Conciliación de tanqueos con facturas electrónicas de combustible</h2>
+    <p class="muted small" style="margin-top:0">Suba las facturas del proveedor: XML (factura electrónica DIAN o AttachedDocument), ZIP con XML, o Excel/CSV con columnas Factura, Fecha, Placa, Galones, Valor. Cada línea se cruza con un tanqueo por placa, fecha (± días) y galones. Si la placa no viene en la factura, el cruce se hace por fecha y galones.</p>
+    <div class="row"><button class="btn" id="fa-btn" type="button">Subir facturas</button><input type="file" id="fa-file" multiple accept=".xml,.zip,.csv,.txt,.xlsx,.xls" hidden>
+      <div style="min-width:190px"><label>Mostrar</label><select id="fa-est"><option value="">Todo</option><option value="ok">Conciliado</option><option value="warn">Con diferencia</option><option value="crit">Sin cruce</option></select></div>
+      <button class="btn dng sm" id="fa-del" type="button">Eliminar facturas cargadas</button></div>
+    <div id="fa-kpis" class="kpis"></div>
+  </div>
+  <div class="card"><div class="wrap"><table class="tbl" id="tbl-fac"></table></div></div>
+</section>
+
+<!-- ============ SATRACK ============ -->
+<section id="tab-satrack">
+  <div class="card">
+    <h2>Informe de Satrack</h2>
+    <p class="muted small" style="margin-top:0">Suba el informe de recorridos de Satrack (PDF, Excel o CSV). Cada fila es un intervalo con los km recorridos (el punto de partida siempre es 0). El sistema los asigna a los períodos de tanqueo de cada vehículo y los compara con odómetro y viajes. Si vuelve a subir el mismo intervalo, se actualiza y no se duplica.</p>
+    <div class="row">
+      <button class="btn" type="button" id="sat-btn">Subir informe (PDF, Excel o CSV)</button>
+      <button class="btn sec" type="button" id="sat-api">Sincronizar desde API Satrack</button>
+      <input type="file" id="sat-file" accept=".csv,.txt,.xlsx,.xls,.pdf" hidden>
+    </div>
+    <div id="sat-map" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <h2>Informes cargados</h2>
+    <div class="wrap"><table class="tbl" id="tbl-lotes"></table></div>
+  </div>
+  <div class="card">
+    <h2>Satrack frente a los viajes registrados</h2>
+    <div class="row" style="margin-bottom:8px"><div style="min-width:200px"><label>Vehículo</label><select id="sat-placa"></select></div></div>
+    <div class="wrap"><table class="tbl" id="tbl-sat"></table></div>
+    <p class="muted small">Km de viajes = distancia de ruta estándar × número de viajes registrados en el intervalo. La comparación contra el odómetro se hace por período de tanqueo en la pestaña Conciliación.</p>
+  </div>
+</section>
+
+<!-- ============ GERENCIAL ============ -->
+<section id="tab-gerencial">
+  <div class="card">
+    <h2>Análisis gerencial de combustible</h2>
+    <div class="row">
+      <div style="min-width:170px"><label>Mes</label><select id="g-mes"></select></div>
+      <div style="min-width:170px"><label>Vehículo</label><select id="g-placa"></select></div>
+      <div style="min-width:190px"><label>Kilómetros base</label><select id="g-base" class="sel-base"></select></div>
+    </div>
+    <div id="g-kpis" class="kpis"></div>
+    <p id="g-nota" class="muted small"></p>
+  </div>
+  <div class="card">
+    <h2>Análisis por dimensión y puntos de referencia</h2>
+    <div class="row"><div style="min-width:190px"><label>Agrupar por</label><select id="g-dim"><option value="dia">Día</option><option value="mes" selected>Mes</option><option value="conductor">Conductor</option><option value="ruta">Ruta</option><option value="vehiculo">Vehículo</option></select></div></div>
+    <h3>Diferencia de galones: reales − esperados según cada referencia</h3>
+    <div class="chartbox"><canvas id="g-c3"></canvas></div>
+    <h3>Indicadores financieros del consumo</h3>
+    <div class="chartbox"><canvas id="g-c4"></canvas></div>
+    <div class="wrap" id="g-dimtbl" style="margin-top:12px"></div>
+    <p class="muted small" id="g-dimnota"></p>
+  </div>
+  <div class="card">
+    <h2>Gasto en combustible por mes</h2>
+    <div class="chartbox"><canvas id="g-c1"></canvas></div>
+    <p id="g-m1" class="muted small"></p>
+  </div>
+  <div class="card">
+    <h2>Desviación del consumo frente al estándar, por período</h2>
+    <div class="chartbox"><canvas id="g-c2"></canvas></div>
+    <p class="muted small" id="g-m2"></p>
+  </div>
+  <div class="card">
+    <h2>Indicadores por vehículo</h2>
+    <div class="wrap" id="g-ranking"></div>
+  </div>
+  <div class="card">
+    <h2>Alertas y desviaciones para validar</h2>
+    <p class="muted small" style="margin-top:0">Son señales para revisar, no conclusiones. Haga clic en una alerta para abrir el período en Conciliación.</p>
+    <div id="g-alertas"></div>
+  </div>
+</section>
+
+<!-- ============ CONFIG ============ -->
+<section id="tab-config">
+  <div class="card">
+    <h2>Parámetros de conciliación</h2>
+    <div class="grid">
+      <div><label>Tolerancia odómetro vs Satrack (%)</label><input type="number" id="c-tol" min="0" step="0.5"></div>
+      <div><label>Factor para CRÍTICO sin historial suficiente (× tolerancia)</label><input type="number" id="c-crit" min="1" step="0.1"></div>
+      <div><label>Fuente principal de kilometraje</label>
+        <select id="c-fuente">
+          <option value="comparativo">Comparativo (recomendado)</option>
+          <option value="odometro">Odómetro</option>
+          <option value="satrack">Satrack</option>
+          <option value="automatico">Automático</option>
+        </select></div>
+      <div><label>Tolerancia de consumo vs estándar (%)</label><input type="number" id="c-tolcons" min="0" step="0.5"></div>
+      <div><label>Alerta por rutas repetidas: variación de galones (%)</label><input type="number" id="c-tolrep" min="0" step="0.5"></div>
+      <div><label>Salto anormal: veces la mediana histórica</label><input type="number" id="c-saltof" min="1.5" step="0.5"></div>
+      <div><label>Salto anormal: mínimo de intervalos previos</label><input type="number" id="c-saltom" min="1" step="1"></div>
+    </div>
+    <p class="muted small">CRÍTICO: con al menos 3 períodos previos del vehículo con comparación, se marca cuando la diferencia supera la media histórica + 2 desviaciones estándar (y la tolerancia). Sin historial suficiente se usa tolerancia × factor. Ninguna regla atribuye responsabilidad al conductor.</p>
+    <p class="muted small"><b>Fuente principal:</b> <i>Odómetro</i> o <i>Satrack</i> fijan la fuente de kilometraje para el escenario D (ralentí). <i>Automático</i> usa el odómetro si es consistente y concuerda con Satrack dentro de la tolerancia; si hay error de lectura usa Satrack; si hay conflicto muestra ambas. <i>Comparativo</i> conserva y muestra ambas siempre.</p>
+  </div>
+
+  <div class="card">
+    <h2>Vehículos y parámetros de consumo</h2>
+    <div class="wrap"><table class="tbl" id="tbl-veh"></table></div>
+    <h3>Agregar o actualizar vehículo</h3>
+    <form id="f-veh" class="grid">
+      <div><label>Placa *</label><input id="vh-placa" required style="text-transform:uppercase"></div>
+      <div><label>Capacidad del tanque (gal)</label><input type="number" id="vh-cap" min="0" step="1"></div>
+      <div><label>Consumo estándar (gal/km) *</label><input type="number" id="vh-std" min="0.001" step="0.001" required></div>
+      <div><label>Consumo en ralentí (gal/h)</label><input type="number" id="vh-ral" min="0" step="0.05"></div>
+      <div style="align-self:end"><button class="btn" type="submit">Guardar vehículo</button></div>
+    </form>
+    <p class="muted small">Cada vehículo tiene sus propios parámetros; no se asume el mismo consumo para toda la flota. Los valores iniciales son estimaciones y deben calibrarse con datos reales.</p>
+  </div>
+
+  <div class="card">
+    <h2>Rutas estándar</h2>
+    <p class="muted small" style="margin-top:0">Estas rutas aparecen automáticamente en la sesión de Viajes. El galonaje aproximado por viaje de cada ruta se define por vehículo: si no escribe un valor, se calcula como km estándar × consumo estándar de ese vehículo.</p>
+    <div class="wrap"><table class="tbl" id="tbl-rutas"></table></div>
+    <h3 id="r-titulo">Crear o editar ruta</h3>
+    <form id="f-ruta">
+      <div class="grid">
+        <div><label>Nombre de la ruta *</label><input id="r-nombre" required placeholder="Santa Marta – Palermo"></div>
+        <div><label>Km estándar por viaje *</label><input type="number" id="r-km" min="0.1" step="0.1" required></div>
+        <div><label>Galonaje para todos los vehículos (opcional)</label><input type="number" id="r-gal" min="0" step="0.1"></div>
+        <div><label>Notas</label><input id="r-nota"></div>
+      </div>
+      <h3>Galonaje estándar por viaje, por vehículo (opcional)</h3>
+      <div class="grid" id="r-veh"></div>
+      <div class="row" style="margin-top:12px"><button class="btn" type="submit" id="r-guardar">Guardar ruta</button><button class="btn sec" type="button" id="r-cancelar" hidden>Cancelar</button></div>
+    </form>
+    <h3>Importar varias rutas</h3>
+    <textarea id="r-import" rows="4" placeholder="Una ruta por línea, separando nombre y km con punto y coma:&#10;Santa Marta – Palermo ; 28&#10;Santa Marta – Ciénaga ; 40"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn sec" type="button" id="r-imp">Importar rutas</button></div>
+    <p class="muted small">Prioridad del galonaje: valor del vehículo en la ruta → valor para todos los vehículos → km estándar × consumo estándar del vehículo. Si cambia el km de una ruta, los viajes ya registrados conservan el km con el que se hicieron.</p>
+  </div>
+
+  <div class="card">
+    <h2>Base de conductores</h2>
+    <div class="wrap"><table class="tbl" id="tbl-cond"></table></div>
+    <h3 id="c-titulo">Crear o editar conductor</h3>
+    <form id="f-cond" class="grid">
+      <div><label>Nombre completo *</label><input id="cd-nombre" required></div>
+      <div><label>Documento (opcional)</label><input id="cd-doc"></div>
+      <div><label>Notas</label><input id="cd-nota"></div>
+      <div class="row" style="align-self:end"><button class="btn" type="submit" id="cd-guardar">Guardar conductor</button><button class="btn sec" type="button" id="cd-cancelar" hidden>Cancelar</button></div>
+    </form>
+    <p class="muted small">Los conductores de esta base aparecen como sugerencia en Tanqueos y Viajes. Si cambia un nombre, se actualiza en los registros que lo usan. Si elimina un conductor, los registros históricos conservan su nombre.</p>
+  </div>
+
+  <div class="card">
+    <h2>Google Sheets (Apps Script) y facturas</h2>
+    <p class="muted small" style="margin-top:0">Google Sheets es la base principal: cada cambio se guarda allí y al abrir el aplicativo se descarga lo que hay en la hoja. Los pasos de instalación están en Code.gs. Los secretos de Satrack se guardan en las propiedades del script, nunca en este archivo.</p>
+    <div class="grid">
+      <div><label>URL de la aplicación web (Apps Script)</label><input id="cl-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+      <div><label>Token de acceso (APP_TOKEN)</label><input id="cl-tok" type="password"></div>
+      <div><label>Factura vs tanqueo: tolerancia de galones (%)</label><input type="number" id="c-tfp" min="0" step="0.5"></div>
+      <div><label>Factura vs tanqueo: tolerancia de fecha (días)</label><input type="number" id="c-tfd" min="0" step="1"></div>
+      <div><label>Factura vs tanqueo: tolerancia de valor (%)</label><input type="number" id="c-tfv" min="0" step="0.5"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button></div>
+  </div>
+  <div class="card">
+    <h2>Datos</h2>
+    <p class="muted small" style="margin-top:0"><b>Regla fundamental:</b> el módulo conserva siempre la información original. Nunca reemplaza el odómetro por Satrack, Satrack por odómetro ni la ruta por el recorrido GPS: cada fuente se guarda de forma independiente y el sistema concilia sin borrar las diferencias.</p>
+    <div class="row">
+      <button class="btn sec" id="d-demo">Cargar datos de ejemplo</button>
+      <button class="btn sec" id="d-csv">Exportar conciliación (CSV)</button>
+      <button class="btn sec" id="d-json">Respaldo (JSON)</button>
+      <button class="btn sec" id="d-imp">Importar respaldo</button>
+      <input type="file" id="d-file" accept="application/json" hidden>
+      <button class="btn dng" id="d-borrar">Borrar todo</button>
+    </div>
+    <p class="muted small">Los datos se guardan en este navegador y, si Google Sheets está conectado, también allí (las fotos solo en IndexedDB de este navegador). El respaldo JSON no incluye fotos. La conexión directa al API de Satrack se hace desde el backend con los endpoints contratados; mientras tanto, el informe se carga por archivo.</p>
+  </div>
+</section>
+</main>
+
+<dialog id="dlg"><div id="dlg-body"></div><div class="row" style="margin-top:10px"><button class="btn" id="dlg-x">Cerrar</button></div></dialog>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* ===================== Utilidades ===================== */
+const LOGO='data:image/png;base64,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';document.querySelectorAll('[data-logo]').forEach(i=>i.src=LOGO);document.getElementById('fav').href=LOGO;
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isNum=v=>v!==null&&v!==undefined&&v!==''&&!isNaN(Number(v));
+const num=v=>isNum(v)?Number(v):null;
+const fmt=(n,d=0)=>(n==null||isNaN(n))?'—':Number(n).toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money=n=>(n==null||isNaN(n))?'—':'$ '+Math.round(n).toLocaleString('es-CO');
+const sg=(x,d=1)=>x==null?'—':(x>0?'+':'')+fmt(x,d)+' %';
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const pad=n=>String(n).padStart(2,'0');
+const fd=f=>f?f.split('-').reverse().join('/'):'';
+const fdt=i=>i?fd(i.slice(0,10))+' '+i.slice(11,16):'';
+const median=a=>{const s=[...a].sort((x,y)=>x-y),m=Math.floor(s.length/2);return s.length?(s.length%2?s[m]:(s[m-1]+s[m])/2):0};
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+const sdev=a=>{const m=avg(a);return Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/a.length)};
+const norm=s=>String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+const normPlaca=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',3600)};
+const ICON={ok:'🟢',warn:'🟡',crit:'🔴',err:'🔴',na:'⚪'};
+const chip=(n,t)=>`<span class="chip ${n}">${ICON[n]} ${esc(t)}</span>`;
+const DIA=864e5;
+const fT=ms=>{const d=new Date(ms);return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes())};
+const fTd=ms=>fT(ms).slice(0,10);
+const mesTxt=m=>{if(!m)return 'todos los meses';const [y,mo]=m.split('-');const s=new Date(+y,+mo-1,1).toLocaleDateString('es-CO',{month:'long',year:'numeric'});return s};
+const BASES={odo:'Odómetro',sat:'Satrack',ruta:'Rutas estándar'};
+
+/* ===================== Estado ===================== */
+const LS='igc_km_modulo_v1';
+const defaults=()=>({config:{tolPct:10,critFactor:2,fuente:'comparativo',saltoFactor:4,saltoMin:2,tolConsumo:10,tolRepeticion:10,baseKm:'odo',tolFacPct:2,tolFacDias:1,tolFacValor:5},vehiculos:[],conductores:[],rutas:[],tanqueos:[],viajes:[],satrack:[],satLotes:[],facturas:[],preop:[]});
+function normState(o){
+  const d=defaults(),s={config:Object.assign(d.config,(o&&o.config)||{})};
+  ['vehiculos','conductores','rutas','tanqueos','viajes','satrack','satLotes','facturas','preop'].forEach(k=>s[k]=Array.isArray(o&&o[k])?o[k]:[]);
+  s.viajes.forEach(v=>{if(!v.nViajes)v.nViajes=1});s.rutas.forEach(r=>{if(!r.galVeh)r.galVeh={}});
+  return s;
+}
+function load(){try{const r=localStorage.getItem(LS);if(r)return normState(JSON.parse(r))}catch(e){}return defaults()}
+let S=load();
+function save(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){toast('No se pudo guardar en el navegador')}schedPush()}
+
+/* Fotos en IndexedDB */
+let dbp=null;
+function getDB(){if(!dbp)dbp=new Promise((res,rej)=>{if(typeof indexedDB==='undefined')return rej(new Error('sin IndexedDB'));const r=indexedDB.open('igc_km_fotos',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});return dbp}
+async function fPut(k,v){const db=await getDB();return new Promise((res,rej)=>{const t=db.transaction('f','readwrite');t.objectStore('f').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}
+async function fGet(k){const db=await getDB();return new Promise((res,rej)=>{const q=db.transaction('f').objectStore('f').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
+async function fDel(k){try{const db=await getDB();db.transaction('f','readwrite').objectStore('f').delete(k)}catch(e){}}
+function compress(file){return new Promise((res,rej)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const s=Math.min(1,1000/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.72))};img.onerror=rej;img.src=u})}
+
+/* ===================== Lógica ===================== */
+const dtT=r=>new Date(r.fecha+'T'+(r.hora||'00:00')).getTime();
+const dtV=v=>new Date(v.salida).getTime();
+const recsOf=p=>S.tanqueos.filter(r=>r.placa===p).sort((a,b)=>dtT(a)-dtT(b));
+const vehiculo=p=>S.vehiculos.find(v=>v.placa===p)||{placa:p,capacidad:null,std:0.15,ralenti:null};
+const dpair=(a,b)=>(a==null||b==null)?null:{abs:Math.abs(b-a),sign:b-a,pct:a>0?Math.abs(b-a)/a*100:null};
+const placas=()=>[...new Set(S.tanqueos.map(r=>r.placa).concat(S.viajes.map(v=>v.placa)))].sort();
+const rutaDe=v=>v.rutaId?S.rutas.find(r=>r.id===v.rutaId):null;
+const galManual=(r,placa)=>{if(!r)return null;const g=r.galVeh&&r.galVeh[placa];if(isNum(g))return Number(g);return isNum(r.galFijo)?Number(r.galFijo):null};
+const galRuta=(r,placa,std)=>{const g=galManual(r,placa);return g!=null?g:r.km*std};
+const nV=v=>v.nViajes||1;
+const galUnit=v=>{const g=galManual(rutaDe(v),v.placa);return g!=null?g:(v.kmRuta||0)*vehiculo(v.placa).std};
+const galViaje=v=>galUnit(v)*nV(v);
+const kmViaje=v=>(v.kmRuta||0)*nV(v);
+const rutaKey=v=>v.rutaId||('m:'+norm(v.ruta));
+const satMid=s=>(s.t0+s.t1)/2;
+
+function analizarPlaca(placa){
+  const rs=recsOf(placa),veh=vehiculo(placa),cfg=S.config,flags={};
+  const add=(id,n,c,m)=>(flags[id]=flags[id]||[]).push({n,c,m});
+  const deltas=[];
+  for(let i=1;i<rs.length;i++){
+    const a=rs[i-1],b=rs[i],d=b.odo-a.odo;
+    if(d<0){add(b.id,'err','ERROR DE LECTURA','El kilometraje final es inferior al kilometraje inicial ('+fmt(a.odo)+' km). Verificar digitación, fotografía del odómetro o posible inconsistencia del registro.')}
+    else{
+      if(d===0)add(b.id,'warn','SIN AVANCE','Sin avance de odómetro respecto al registro anterior.');
+      if(deltas.length>=cfg.saltoMin){const med=median(deltas);if(med>0&&d>med*cfg.saltoFactor)add(b.id,'err','SALTO ANORMAL DE ODÓMETRO','Avance de '+fmt(d)+' km frente a una mediana histórica de '+fmt(med)+' km entre tanqueos. Solicitar revisión.')}
+      deltas.push(d);
+    }
+  }
+  const fullIdx=rs.map((r,i)=>r.full?i:-1).filter(i=>i>=0),per=[];
+  for(let k=1;k<fullIdx.length;k++){
+    const i=fullIdx[k-1],j=fullIdx[k],A=rs[i],B=rs[j],seg=rs.slice(i+1,j+1);
+    const p={placa,A,B,seg,veh};
+    const t0=dtT(A),t1=dtT(B);
+    p.mes=B.fecha.slice(0,7);p.dias=Math.max(0,(t1-t0)/DIA);
+    p.kmOdo=B.odo-A.odo;
+    {const pr=S.preop.filter(x=>x.placa===placa).sort((a,b)=>dtP(a)-dtP(b)),pf=pr.filter(x=>dtP(x)<=t1),pi=[...pr].reverse().find(x=>dtP(x)<=t0)||pr.find(x=>dtP(x)>t0&&dtP(x)<=t1);p.kmPre=(pf.length&&pi)?pf[pf.length-1].km-pi.km:null;if(p.kmPre!=null&&p.kmPre<=0)p.kmPre=null}
+    const sr=S.satrack.filter(s=>s.placa===placa&&satMid(s)>t0&&satMid(s)<=t1),man=seg.filter(r=>isNum(r.satKm));
+    if(sr.length){p.kmSat=sr.reduce((s,x)=>s+x.km,0);p.fuenteSat='Informe Satrack ('+sr.length+' registro'+(sr.length>1?'s':'')+')'}
+    else if(man.length){p.kmSat=man.reduce((s,r)=>s+Number(r.satKm),0);p.fuenteSat='Ingreso manual'}
+    else{p.kmSat=null;p.fuenteSat=null}
+    const d=p.kmSat==null?null:dpair(p.kmOdo,p.kmSat);
+    p.difAbs=d?d.abs:null;p.difSign=d?d.sign:null;p.difPct=d&&p.kmOdo>0?d.pct:null;
+    p.gal=seg.reduce((s,r)=>s+(r.gal||0),0);
+    const srR=sr.filter(x=>isNum(x.ralentiH)),conR=seg.filter(r=>isNum(r.ralentiH));
+    p.ralentiH=srR.length?srR.reduce((s,x)=>s+x.ralentiH,0):(conR.length?conR.reduce((s,r)=>s+Number(r.ralentiH),0):null);
+    p.viajes=S.viajes.filter(v=>v.placa===placa&&dtV(v)>t0&&dtV(v)<=t1).sort((a,b)=>dtV(a)-dtV(b));
+    p.nViajes=p.viajes.reduce((s,v)=>s+nV(v),0);
+    p.kmViajes=p.viajes.length?p.viajes.reduce((s,v)=>s+kmViaje(v),0):null;
+    p.galAprox=p.viajes.length?p.viajes.reduce((s,v)=>s+galViaje(v),0):null;
+    const conP=seg.filter(r=>isNum(r.precio)&&r.gal>0),galP=conP.reduce((s,r)=>s+r.gal,0);
+    p.precioProm=galP>0?conP.reduce((s,r)=>s+r.gal*r.precio,0)/galP:null;
+    p.costoParcial=conP.length>0&&conP.length<seg.filter(r=>r.gal>0).length;
+    p.costo=p.precioProm==null?null:(p.costoParcial?p.gal*p.precioProm:conP.reduce((s,r)=>s+r.gal*r.precio,0));
+    const gr={};p.viajes.forEach(v=>{const key=rutaKey(v);gr[key]=gr[key]||{n:0,nombre:v.ruta};gr[key].n+=nV(v)});
+    const ks=Object.keys(gr).sort();
+    p.firma=ks.length?ks.map(x=>x+'×'+gr[x].n).join('+'):null;
+    p.firmaTxt=ks.map(x=>gr[x].nombre+' ×'+gr[x].n).join(', ');
+    per.push(p);
+  }
+  const pcts=per.map(p=>p.difPct);
+  per.forEach((p,i)=>{
+    const others=pcts.filter((v,j)=>j!==i&&v!=null);
+    p.hist=others.length>=3?{n:others.length,mean:avg(others),sd:Math.max(sdev(others),1)}:null;
+    p.gkr=p.kmViajes>0?p.gal/p.kmViajes:null;
+    p.rep=null;
+    if(p.firma){
+      const prev=per.slice(0,i).filter(q=>q.firma===p.firma&&q.gal>0);
+      if(prev.length){const last=prev[prev.length-1],dif=p.gal-last.gal,pct=last.gal>0?dif/last.gal*100:null;
+        p.rep={last,n:prev.length,mean:avg(prev.map(q=>q.gal)),dif,pct,alerta:pct!=null&&Math.abs(pct)>cfg.tolRepeticion}}
+    }
+    const pg=per.slice(0,i).map(q=>q.gkr).filter(x=>x!=null);
+    p.devHist=(p.gkr!=null&&pg.length>=2&&median(pg)>0)?(p.gkr-median(pg))/median(pg)*100:null;
+  });
+  per.forEach(p=>{evaluar(p,flags);consumo(p);calidad(p)});
+  return{per,flags};
+}
+
+function repTexto(p){
+  const r=p.rep;if(!r)return null;const mas=r.dif>0;
+  return 'Hiciste las mismas rutas ('+p.firmaTxt+') entre el '+fd(p.A.fecha)+' y el '+fd(p.B.fecha)+' ('+fmt(p.dias,0)+' días) y consumiste '+fmt(p.gal,1)+' gal, '+fmt(Math.abs(r.dif),1)+' gal '+(mas?'más':'menos')+(r.pct!=null?' ('+(mas?'+':'−')+fmt(Math.abs(r.pct),1)+' %)':'')+' que en el período '+fd(r.last.A.fecha)+' – '+fd(r.last.B.fecha)+' ('+fmt(r.last.gal,1)+' gal, '+fmt(r.last.dias,0)+' días). Km odómetro: '+fmt(p.kmOdo)+' vs '+fmt(r.last.kmOdo)+'.';
+}
+
+function evaluar(p,flags){
+  const cfg=S.config;
+  p.segFlags=p.seg.flatMap(r=>flags[r.id]||[]);
+  const f=c=>p.segFlags.find(x=>x.c===c);
+  let e;
+  if(p.kmOdo<=0||f('ERROR DE LECTURA'))e={n:'err',t:'ERROR DE LECTURA',m:'El kilometraje final es inferior al kilometraje inicial o no hay avance. Verificar digitación, fotografía del odómetro o posible inconsistencia del registro.'};
+  else if(f('SALTO ANORMAL DE ODÓMETRO'))e={n:'err',t:'SALTO ANORMAL DE ODÓMETRO',m:f('SALTO ANORMAL DE ODÓMETRO').m};
+  else if(p.difPct==null)e={n:'na',t:'SIN COMPARACIÓN CON SATRACK',m:'No hay km de Satrack para este período (suba el informe de Satrack o digite los km del intervalo), por lo que no es posible comparar fuentes de kilometraje.'};
+  else if(p.difPct<=cfg.tolPct)e={n:'ok',t:'NORMAL',m:'La diferencia entre odómetro y Satrack ('+fmt(p.difPct,1)+' %) está dentro de la tolerancia configurada ('+fmt(cfg.tolPct,1)+' %).'};
+  else{
+    const crit=p.hist?p.difPct>p.hist.mean+2*p.hist.sd:p.difPct>cfg.tolPct*cfg.critFactor;
+    const base=p.hist?'Se compara con el comportamiento histórico del vehículo ('+p.hist.n+' períodos: media '+fmt(p.hist.mean,1)+' %, desv. '+fmt(p.hist.sd,1)+' %).':'Sin historial suficiente del vehículo; umbral crítico = tolerancia × '+fmt(cfg.critFactor,1)+' = '+fmt(cfg.tolPct*cfg.critFactor,1)+' %.';
+    e={n:crit?'crit':'warn',t:crit?'CRÍTICO · REVISAR DIFERENCIA DE KILOMETRAJE':'REVISAR DIFERENCIA DE KILOMETRAJE',
+       m:'Se presenta una diferencia entre el kilometraje registrado por el odómetro y el recorrido informado por Satrack. Se recomienda verificar calibración, fuente de información, instalación del dispositivo y condiciones de medición.',base};
+  }
+  if(e.n==='ok'&&p.segFlags.some(x=>x.n==='warn')){e={n:'warn',t:'REVISAR REGISTRO',m:p.segFlags.filter(x=>x.n==='warn').map(x=>x.m).join(' ')}}
+  p.estado=e;
+}
+
+function fuentesRef(p){
+  const m=S.config.fuente;
+  if(m==='odometro')return['odo'];
+  if(m==='satrack')return p.kmSat!=null?['sat']:['odo'];
+  if(m==='comparativo')return p.kmSat!=null?['odo','sat']:['odo'];
+  if(p.kmOdo<=0)return p.kmSat!=null?['sat']:['odo'];
+  if(p.kmSat==null||p.difPct<=S.config.tolPct)return['odo'];
+  return['odo','sat'];
+}
+
+function consumo(p){
+  const std=p.veh.std,gal=p.gal;
+  p.consOdo=p.kmOdo>0?gal/p.kmOdo:null;p.kmgalOdo=p.kmOdo>0?p.kmOdo/gal:null;
+  p.consSat=p.kmSat>0?gal/p.kmSat:null;p.kmgalSat=p.kmSat>0?p.kmSat/gal:null;
+  p.devOdo=p.consOdo!=null?(p.consOdo-std)/std*100:null;
+  p.devSat=p.consSat!=null?(p.consSat-std)/std*100:null;
+  const E=[];
+  const mk=(id,nombre,km,extra)=>{if(km==null||km<=0)return;const esp=km*std+(extra||0);E.push({id,nombre,km,esp,real:gal,dev:esp>0?(gal-esp)/esp*100:null})};
+  mk('A','A · Consumo según odómetro',p.kmOdo);
+  mk('B','B · Consumo según Satrack',p.kmSat);
+  mk('P','P · Esperado según medición preoperacional',p.kmPre);
+  mk('C','C · Esperado según rutas de los viajes',p.kmViajes);
+  const cC=E.find(x=>x.id==='C');if(cC&&p.galAprox!=null){cC.esp=p.galAprox;cC.dev=cC.esp>0?(cC.real-cC.esp)/cC.esp*100:null}
+  p.escenarios=E;
+  p.refs=fuentesRef(p);
+  p.ralPosible=p.ralentiH!=null&&p.veh.ralenti!=null;
+  if(p.ralPosible){
+    const extra=p.ralentiH*p.veh.ralenti;
+    p.refs.forEach(r=>mk('D'+r,'D · Esperado ajustado por ralentí ('+(r==='odo'?'km odómetro':'km Satrack')+')',r==='odo'?p.kmOdo:p.kmSat,extra));
+  }
+  const tc=S.config.tolConsumo;
+  if(p.devOdo!=null&&p.devSat!=null){
+    const o=Math.abs(p.devOdo)<=tc,s=Math.abs(p.devSat)<=tc;
+    p.fraseCons=s&&!o?'El consumo calculado según Satrack se encuentra cercano al estándar, mientras que el consumo calculado según odómetro presenta una desviación superior.'
+      :o&&!s?'El consumo calculado según odómetro se encuentra cercano al estándar, mientras que el consumo calculado según Satrack presenta una desviación superior.'
+      :o&&s?'El consumo calculado con ambas fuentes se encuentra cercano al estándar.'
+      :'El consumo calculado con ambas fuentes presenta desviación frente al estándar.';
+  }else p.fraseCons=null;
+}
+
+function calidad(p){
+  const f=[['Odómetro',p.kmOdo>0],['Satrack',p.kmSat!=null],['Viajes',p.viajes.length>0],['Tanqueos',p.gal>0],['Ralentí',p.ralentiH!=null]];
+  p.fuentes=f;const faltan=f.filter(x=>!x[1]);
+  p.calidad=faltan.length===0?{n:'ok',t:'ALTA',m:'Odómetro, Satrack, viajes, tanqueos y ralentí disponibles.'}
+    :faltan.length===1?{n:'warn',t:'MEDIA',m:'Falta una de las fuentes: '+faltan[0][0]+'.'}
+    :{n:'crit',t:'BAJA',m:'Faltan dos o más fuentes importantes: '+faltan.map(x=>x[0]).join(', ')+'. No se recomienda decidir con este período.'};
+}
+
+function conclusion(p){
+  let s='Durante el período analizado ('+fd(p.A.fecha)+' – '+fd(p.B.fecha)+'), el vehículo '+p.placa+' registró '+fmt(p.kmOdo)+' km según odómetro';
+  if(p.kmSat!=null)s+=' y '+fmt(p.kmSat)+' km según Satrack'+(p.difPct!=null?', con una diferencia de '+fmt(p.difPct,0)+' %':'');
+  s+='. ';
+  s+=p.nViajes?'Realizó '+p.nViajes+' viaje'+(p.nViajes>1?'s':''):'No hay viajes registrados en el período';
+  if(p.ralentiH!=null)s+=(p.nViajes?' y presentó ':' y se registraron ')+fmt(p.ralentiH,0)+' horas de ralentí';
+  s+='. ';
+  if(p.costo!=null)s+='El combustible del período fue de '+fmt(p.gal,1)+' gal a un precio promedio de '+money(p.precioProm)+' por galón, para un total de '+money(p.costo)+(p.nViajes?' ('+money(p.costo/p.nViajes)+' por viaje)':'')+'. ';
+  if(p.consOdo!=null){
+    s+='El consumo calculado según odómetro fue de '+fmt(p.consOdo,3)+' gal/km';
+    if(p.consSat!=null)s+=', mientras que según Satrack fue de '+fmt(p.consSat,3)+' gal/km';
+    s+=' frente al estándar corporativo de '+fmt(p.veh.std,3)+' gal/km. ';
+  }
+  const n=p.estado.n;
+  if(n==='err')s+='Existe una inconsistencia en las lecturas de odómetro; se recomienda verificar digitación y fotografía antes de calcular el consumo.';
+  else if(n==='warn'||n==='crit')s+='Debido a la diferencia entre fuentes, se recomienda validar las lecturas antes de determinar una desviación real de combustible.';
+  else if(n==='ok')s+='Las fuentes de kilometraje concuerdan dentro de la tolerancia configurada, por lo que la comparación de consumo es más confiable.';
+  else s+='Al no contar con comparación de Satrack, se recomienda complementar la información antes de determinar una desviación real de combustible.';
+  if(p.rep&&p.rep.alerta)s+=' '+repTexto(p);
+  if(p.calidad.n!=='ok')s+=' Calidad del dato '+p.calidad.t.toLowerCase()+': '+p.calidad.m;
+  return s;
+}
+
+const analisisTodo=()=>{const m={};placas().forEach(pl=>m[pl]=analizarPlaca(pl));return m};
+const todosPeriodos=()=>Object.values(analisisTodo()).flatMap(a=>a.per);
+const periodosFiltrados=(mes,placa)=>todosPeriodos().filter(p=>(!mes||p.mes===mes)&&(!placa||p.placa===placa)).sort((a,b)=>dtT(a.B)-dtT(b.B));
+
+/* ===== Agregados gerenciales ===== */
+function kmBase(p,modo){
+  if(modo==='sat')return p.kmSat>0?p.kmSat:null;
+  if(modo==='ruta')return p.kmViajes>0?p.kmViajes:null;
+  return(p.kmOdo>0&&p.estado.n!=='err')?p.kmOdo:null;
+}
+function agg(per,modo){
+  const o={n:0,sinDato:0,km:0,gal:0,esp:0,nViajes:0,costo:0,galP:0,kmP:0,viajesP:0,galAprox:0,galAproxN:0};
+  per.forEach(p=>{
+    const km=kmBase(p,modo);if(km==null){o.sinDato++;return}
+    o.n++;o.km+=km;o.gal+=p.gal;o.esp+=km*p.veh.std;o.nViajes+=p.nViajes;
+    if(p.costo!=null){o.costo+=p.costo;o.galP+=p.gal;o.kmP+=km;o.viajesP+=p.nViajes}
+    if(p.galAprox!=null){o.galAprox+=p.galAprox;o.galAproxN+=p.gal}
+  });
+  o.galkm=o.km>0?o.gal/o.km:null;o.kmgal=o.gal>0?o.km/o.gal:null;
+  o.desv=o.esp>0?(o.gal-o.esp)/o.esp*100:null;o.sobreGal=o.gal-o.esp;
+  o.precio=o.galP>0?o.costo/o.galP:null;o.sobreCosto=o.precio!=null?o.sobreGal*o.precio:null;
+  o.costoKm=o.kmP>0?o.costo/o.kmP:null;o.costoViaje=o.viajesP>0?o.costo/o.viajesP:null;
+  o.galViaje=o.nViajes>0?o.gal/o.nViajes:null;
+  return o;
+}
+function repartos(p){
+  const tv=p.viajes,tot=tv.reduce((s,v)=>s+kmViaje(v),0);
+  if(!tv.length||tot<=0)return[{cond:p.B.conductor||'Sin conductor',ruta:'Sin ruta registrada',share:1,n:0,km:0,galAprox:0}];
+  return tv.map(v=>({cond:v.conductor||p.B.conductor||'Sin conductor',ruta:v.ruta||'Sin ruta',share:kmViaje(v)/tot,n:nV(v),km:kmViaje(v),galAprox:galViaje(v)}));
+}
+function agruparPor(per,dim,modo){
+  const G={};
+  per.forEach(p=>{
+    if(kmBase(p,modo)==null)return;
+    repartos(p).forEach(r=>{
+      const k=r[dim];const g=G[k]=G[k]||{k,n:0,km:0,gal:0,galAprox:0,costo:0,galP:0,nP:0};
+      g.n+=r.n;g.km+=r.km;g.galAprox+=r.galAprox;g.gal+=p.gal*r.share;
+      if(p.costo!=null){g.costo+=p.costo*r.share;g.galP+=p.gal*r.share;g.nP+=r.n}
+    });
+  });
+  return Object.values(G).sort((a,b)=>b.gal-a.gal);
+}
+function alertas(per,modo){
+  const L=[],tc=S.config.tolConsumo,tr=S.config.tolRepeticion;
+  per.forEach(p=>{
+    const key=p.placa+'|'+p.B.id,ref=p.placa+' · '+fd(p.A.fecha)+' – '+fd(p.B.fecha);
+    if(p.estado.n==='err')L.push({n:'err',key,t:ref+' · '+p.estado.t+'.'});
+    else if(p.estado.n==='crit'||p.estado.n==='warn')L.push({n:p.estado.n,key,t:ref+' · Diferencia odómetro vs Satrack de '+fmt(p.difPct,1)+' %.'});
+    const km=kmBase(p,modo);
+    if(km){const esp=km*p.veh.std,dev=(p.gal-esp)/esp*100;
+      if(Math.abs(dev)>tc)L.push({n:Math.abs(dev)>tc*2?'crit':'warn',key,t:ref+' · Consumo '+fmt(Math.abs(dev),1)+' % ('+sgal(p.gal-esp)+') '+(dev>0?'superior':'inferior')+' al estándar ('+fmt(p.gal,1)+' gal reales vs '+fmt(esp,1)+' esperados con km '+BASES[modo].toLowerCase()+').'})}
+    if(p.rep&&p.rep.alerta)L.push({n:Math.abs(p.rep.pct)>tr*2?'crit':'warn',key,t:ref+' · '+repTexto(p)});
+    if(p.devHist!=null&&p.devHist>tr)L.push({n:'warn',key,t:ref+' · Galones por km de ruta '+fmt(p.devHist,1)+' % por encima de la mediana histórica del vehículo.'});
+  });
+  const ord={err:0,crit:1,warn:2};
+  return L.sort((a,b)=>ord[a.n]-ord[b.n]);
+}
+
+/* ===================== Render: conciliación ===================== */
+let selKey=null;
+function selBase(){$$('.sel-base').forEach(s=>{s.innerHTML=Object.entries(BASES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');s.value=S.config.baseKm})}
+function mesesDisp(){return[...new Set(S.tanqueos.map(r=>r.fecha.slice(0,7)))].sort().reverse()}
+function fillMeses(){
+  const ms=mesesDisp();
+  [['#m-mes',false],['#g-mes',true]].forEach(([id,todos])=>{
+    const sel=$(id),cur=sel.value;
+    sel.innerHTML=(todos||true?'<option value="">Todos los meses</option>':'')+ms.map(m=>`<option value="${m}">${esc(mesTxt(m))}</option>`).join('');
+    if([...sel.options].some(o=>o.value===cur))sel.value=cur;else sel.value=(id==='#m-mes'&&ms.length)?ms[0]:'';
+  });
+}
+function tablaVehiculos(per,tq,modo){
+  const pls=[...new Set(per.map(p=>p.placa).concat(tq.map(r=>r.placa)))].sort();
+  if(!pls.length)return '<p class="muted">Sin datos.</p>';
+  let tot={gal:0,gasto:0};
+  const rows=pls.map(pl=>{
+    const a=agg(per.filter(p=>p.placa===pl),modo),t=tq.filter(r=>r.placa===pl),gal=t.reduce((s,r)=>s+(r.gal||0),0),gasto=t.reduce((s,r)=>s+(isNum(r.precio)?r.gal*r.precio:0),0);
+    tot.gal+=gal;tot.gasto+=gasto;
+    return `<tr><td><b>${esc(pl)}</b></td><td class="n">${fmt(gal,1)}</td><td class="n">${gasto?money(gasto):'—'}</td><td class="n">${a.n}${a.sinDato?` <span class="muted small">(+${a.sinDato} sin dato)</span>`:''}</td><td class="n">${fmt(a.km)}</td><td class="n">${fmt(a.gal,1)}</td><td class="n">${fmt(a.galkm,3)}</td><td class="n">${fmt(vehiculo(pl).std,3)}</td><td class="n ${a.desv>S.config.tolConsumo?'bad':''}">${sg(a.desv)}</td><td class="n">${a.nViajes}</td><td class="n">${fmt(a.galViaje,1)}</td><td class="n">${money(a.costoKm)}</td><td class="n">${a.n?fmt(a.sobreGal,1):'—'}</td><td class="n">${money(a.sobreCosto)}</td></tr>`;
+  }).join('');
+  return `<div class="wrap"><table class="tbl"><tr><th>Vehículo</th><th class="n">Tanqueado (gal)</th><th class="n">Gasto</th><th class="n">Períodos</th><th class="n">Km base</th><th class="n">Gal. consumidos</th><th class="n">Gal/km</th><th class="n">Estándar</th><th class="n">Desviación</th><th class="n">Viajes</th><th class="n">Gal/viaje</th><th class="n">Costo/km</th><th class="n">Sobreconsumo (gal)</th><th class="n">Sobreconsumo ($)</th></tr>${rows}<tr class="tot"><td>Total</td><td class="n">${fmt(tot.gal,1)}</td><td class="n">${tot.gasto?money(tot.gasto):'—'}</td><td colspan="11"></td></tr></table></div>`;
+}
+function tablaGrupos(G,titulo){
+  if(!G.length)return '<p class="muted">Sin datos para este mes.</p>';
+  const rows=G.map(g=>{const dv=g.galAprox>0?(g.gal-g.galAprox)/g.galAprox*100:null;
+    return `<tr><td><b>${esc(g.k)}</b></td><td class="n">${g.n}</td><td class="n">${fmt(g.km,1)}</td><td class="n">${fmt(g.gal,1)}</td><td class="n">${g.galAprox>0?fmt(g.galAprox,1):'—'}</td><td class="n ${dv>S.config.tolConsumo?'bad':''}">${sg(dv)}</td><td class="n">${g.galAprox>0?sgal(g.gal-g.galAprox):'—'}</td><td class="n">${g.galP>0?money(g.costo):'—'}</td><td class="n">${g.n>0?fmt(g.gal/g.n,1):'—'}</td><td class="n">${g.nP>0?money(g.costo/g.nP):'—'}</td></tr>`}).join('');
+  return `<div class="wrap"><table class="tbl"><tr><th>${titulo}</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. atribuidos</th><th class="n">Gal. aprox. (rutas)</th><th class="n">Real vs aprox.</th><th class="n">Dif. (gal)</th><th class="n">Costo atribuido</th><th class="n">Gal/viaje</th><th class="n">Costo/viaje</th></tr>${rows}</table></div><p class="muted small">Los galones y el costo de cada período se reparten entre conductores o rutas en proporción al km estándar de los viajes del período; es una estimación. Los períodos sin viajes registrados se asignan al conductor que cerró el tanqueo y a «Sin ruta registrada».</p>`;
+}
+function renderMensual(){
+  const mes=$('#m-mes').value,vista=$('#m-vista').value,modo=S.config.baseKm,out=$('#m-out');
+  const per=periodosFiltrados(mes,''),tq=S.tanqueos.filter(r=>!mes||r.fecha.startsWith(mes));
+  if(!per.length&&!tq.length){out.innerHTML='<p class="muted">Sin datos para consultar. Registre tanqueos o cargue los datos de ejemplo en Configuración.</p>';return}
+  if(vista==='vehiculo'){out.innerHTML='<p class="muted small">Tanqueado y gasto corresponden a las compras del mes; los demás indicadores a los períodos que cierran en el mes.</p>'+tablaVehiculos(per,tq,modo);return}
+  if(vista==='conductor'){out.innerHTML=tablaGrupos(agruparPor(per,'cond',modo),'Conductor');return}
+  if(vista==='ruta'){out.innerHTML=tablaGrupos(agruparPor(per,'ruta',modo),'Ruta');return}
+  const a=agg(per,modo),gal=tq.reduce((s,r)=>s+(r.gal||0),0),conP=tq.filter(r=>isNum(r.precio)),gasto=conP.reduce((s,r)=>s+r.gal*r.precio,0),galConP=conP.reduce((s,r)=>s+r.gal,0);
+  const kp=(t,v,s)=>`<div class="kpi"><span>${t}</span><b>${v}</b>${s?`<span>${s}</span>`:''}</div>`;
+  const nar='En '+mesTxt(mes)+', la compañía tanqueó '+fmt(gal,1)+' gal'+(gasto?' por '+money(gasto)+' (precio promedio '+money(gasto/galConP)+' por galón)':'')+'. En los '+a.n+' períodos cerrados con dato de kilometraje ('+BASES[modo].toLowerCase()+') se recorrieron '+fmt(a.km)+' km con '+fmt(a.gal,1)+' gal ('+fmt(a.galkm,3)+' gal/km), frente a '+fmt(a.esp,1)+' gal esperados según el estándar de cada vehículo: desviación de '+sg(a.desv)+' ('+fmt(a.sobreGal,1)+' gal'+(a.sobreCosto!=null?', '+money(a.sobreCosto):'')+'). Se realizaron '+a.nViajes+' viajes'+(a.galViaje!=null?' ('+fmt(a.galViaje,1)+' gal por viaje'+(a.costoViaje!=null?' y '+money(a.costoViaje)+' por viaje':'')+')':'')+'.';
+  out.innerHTML=`<div class="kpis">${kp('Tanqueado en el mes',fmt(gal,1)+' gal',tq.length+' tanqueos')}${kp('Gasto en combustible',gasto?money(gasto):'—',gasto?'precio prom. '+money(gasto/galConP):'sin precios registrados')}${kp('Períodos cerrados',a.n,a.sinDato?a.sinDato+' sin km de esa base':'')}${kp('Km recorridos ('+BASES[modo]+')',fmt(a.km))}${kp('Gal/km real',fmt(a.galkm,3),'estándar ponderado '+(a.km>0?fmt(a.esp/a.km,3):'—'))}${kp('Desviación vs estándar',sg(a.desv),fmt(a.sobreGal,1)+' gal'+(a.sobreCosto!=null?' · '+money(a.sobreCosto):''))}${kp('Viajes',a.nViajes,a.galViaje!=null?fmt(a.galViaje,1)+' gal/viaje':'')}${kp('Costo por km',money(a.costoKm),a.costoViaje!=null?money(a.costoViaje)+' por viaje':'')}</div><div class="concl" style="margin-top:10px">${esc(nar)}</div><p class="muted small">Los períodos se asignan al mes en que cierran el tanqueo full; el gasto tanqueado corresponde a las compras del mes. Una desviación no indica por sí sola una irregularidad: puede deberse a ralentí, carga, tráfico o a la calidad del dato.</p>`;
+}
+
+function renderResumen(){
+  fillMeses();selBase();renderMensual();
+  const per=todosPeriodos().sort((a,b)=>dtT(b.B)-dtT(a.B));
+  const t=$('#tbl-periodos');
+  $('#vacio-periodos').textContent=per.length?'':'Aún no hay períodos. Registre al menos dos tanqueos full del mismo vehículo, o cargue los datos de ejemplo en Configuración.';
+  t.innerHTML=per.length?`<tr><th>Vehículo</th><th>Período</th><th class="n">Km odómetro</th><th class="n">Km Satrack</th><th class="n">Dif. %</th><th class="n">Viajes</th><th class="n">Combustible</th><th class="n">Dif. galones vs estándar</th><th>Estado</th><th>Rutas repetidas</th><th>Calidad del dato</th></tr>`+
+    per.map(p=>{const k=p.placa+'|'+p.B.id;
+      const rep=p.rep?(p.rep.alerta?chip(Math.abs(p.rep.pct)>S.config.tolRepeticion*2?'crit':'warn',(p.rep.dif>0?'+':'−')+fmt(Math.abs(p.rep.pct),0)+' % galones'):chip('ok','Similar')):'<span class="muted">—</span>';
+      return `<tr class="click ${k===selKey?'sel':''}" data-k="${esc(k)}"><td><b>${esc(p.placa)}</b></td><td>${fd(p.A.fecha)} – ${fd(p.B.fecha)}</td><td class="n">${fmt(p.kmOdo)}</td><td class="n">${fmt(p.kmSat)}</td><td class="n">${p.difPct==null?'—':fmt(p.difPct,1)+' %'}</td><td class="n">${p.nViajes}</td><td class="n">${money(p.costo)}</td><td class="n">${(()=>{const k=kmBase(p,S.config.baseKm);if(!k)return '—';const e=k*p.veh.std;return sgal(p.gal-e)+' <span class="muted small">('+sg((p.gal-e)/e*100)+')</span>'})()}</td><td>${chip(p.estado.n,p.estado.t)}</td><td>${rep}</td><td>${chip(p.calidad.n,p.calidad.t)}</td></tr>`}).join(''):'';
+  t.querySelectorAll('tr.click').forEach(tr=>tr.onclick=()=>{selKey=tr.dataset.k;renderResumen();$('#detalle').scrollIntoView({behavior:'smooth'})});
+  const p=per.find(x=>x.placa+'|'+x.B.id===selKey)||per[0];
+  if(p&&!per.find(x=>x.placa+'|'+x.B.id===selKey))selKey=p.placa+'|'+p.B.id;
+  $('#detalle').innerHTML=p?detalleHTML(p):'';
+  const cb=$('#copiar');if(cb)cb.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($('#concl').textContent).then(()=>toast('Conclusión copiada'))};
+}
+
+function detalleHTML(p){
+  const cfg=S.config,v=p.veh,e=p.estado;
+  const dOS=p.kmSat!=null?dpair(p.kmOdo,p.kmSat):null,dOV=p.kmViajes!=null?dpair(p.kmOdo,p.kmViajes):null,dSV=(p.kmSat!=null&&p.kmViajes!=null)?dpair(p.kmSat,p.kmViajes):null;
+  const difTxt=d=>d?`${fmt(d.abs)} km${d.pct!=null?' ('+fmt(d.pct,1)+' %)':''}`:'—';
+  const coh=[dOS,dOV,dSV].filter(Boolean),cohOk=coh.length>=2&&coh.every(d=>d.pct!=null&&d.pct<=cfg.tolPct);
+  const cohTxt=coh.length<2?{n:'na',t:'No hay suficientes fuentes para juzgar la coherencia'}:cohOk?{n:'ok',t:'Información coherente dentro de la tolerancia'}:{n:'warn',t:'Hay diferencias entre fuentes: revisar antes de concluir'};
+  const flagHtml=p.segFlags.filter(x=>x.n==='err'||x.n==='warn').map(x=>`<div class="msg">${chip(x.n,x.c)} ${esc(x.m)}</div>`).join('');
+  const repHtml=!p.firma?'<p class="muted">No hay viajes registrados en este período, por lo que no se pueden comparar rutas repetidas.</p>'
+    :p.rep?`<div class="banner ${p.rep.alerta?(Math.abs(p.rep.pct)>cfg.tolRepeticion*2?'crit':'warn'):'ok'}"><b>${p.rep.alerta?ICON.warn+' Variación de galones en rutas repetidas':ICON.ok+' Consumo similar al período anterior con las mismas rutas'}</b><div class="msg">${esc(repTexto(p))}</div><div class="msg muted">Períodos anteriores con las mismas rutas: ${p.rep.n} · promedio ${fmt(p.rep.mean,1)} gal · umbral de alerta ±${fmt(cfg.tolRepeticion,1)} %.</div></div>`
+    :'<p class="muted">No hay períodos anteriores de este vehículo con exactamente las mismas rutas y número de viajes ('+esc(p.firmaTxt)+'). Cuando se repita la combinación, se generará la comparación.</p>'
+    +(p.devHist!=null?`<p class="msg">Galones por km de ruta: ${fmt(p.gkr,3)} (${sg(p.devHist)} frente a la mediana histórica del vehículo).</p>`:'');
+  return `
+  <div class="card">
+    <h2>Conciliación de kilometraje · ${esc(p.placa)} · ${fd(p.A.fecha)} ${esc(p.A.hora||'')} → ${fd(p.B.fecha)} ${esc(p.B.hora||'')}</h2>
+    <div class="banner ${e.n}"><b>${ICON[e.n]} ${esc(e.t)}</b>
+      <div class="msg">${esc(e.m)}</div>${e.base?`<div class="msg muted">${esc(e.base)}</div>`:''}${flagHtml&&e.n!=='err'?flagHtml:''}
+      <div class="msg"><b>Calidad del dato:</b> ${chip(p.calidad.n,p.calidad.t)} <span class="muted">${esc(p.calidad.m)}</span></div>
+    </div>
+
+    <h3>Odómetro vs Satrack</h3>
+    <div class="wrap"><table class="tbl">
+      <tr><th>Fuente</th><th class="n">Punto de partida</th><th class="n">Punto final</th><th class="n">Kilómetros</th></tr>
+      <tr><td>Odómetro (acumulado del vehículo)</td><td class="n">${fmt(p.A.odo)}</td><td class="n">${fmt(p.B.odo)}</td><td class="n">${fmt(p.kmOdo)} km</td></tr>
+      <tr><td>Satrack (km del intervalo)</td><td class="n">${p.kmSat==null?'—':'0'}</td><td class="n">${p.kmSat==null?'—':fmt(p.kmSat)}</td><td class="n">${p.kmSat==null?'<span class="muted">No disponible</span>':fmt(p.kmSat)+' km'}</td></tr>
+      <tr><td>Diferencia</td><td></td><td></td><td class="n">${p.difAbs==null?'—':fmt(p.difAbs)+' km'+(p.difSign>0?' (Satrack mayor)':p.difSign<0?' (odómetro mayor)':'')}</td></tr>
+      <tr><td>Diferencia %</td><td></td><td></td><td class="n">${p.difPct==null?'—':fmt(p.difPct,1)+' %'} <span class="muted small">respecto al odómetro · tolerancia ${fmt(cfg.tolPct,1)} %</span></td></tr>
+    </table></div>
+    <p class="muted small">El odómetro es un acumulado con valor propio en cada punto; Satrack informa los km recorridos en el intervalo y arranca en 0. Por eso se comparan km recorridos, no lecturas. ${p.fuenteSat?'Fuente Satrack: '+esc(p.fuenteSat)+'.':''}</p>
+
+    <h3>Consumo según cada fuente</h3>
+    <div class="wrap"><table class="tbl">
+      <tr><th>Indicador</th><th class="n">Odómetro</th><th class="n">Satrack</th></tr>
+      <tr><td>Km recorridos</td><td class="n">${fmt(p.kmOdo)}</td><td class="n">${fmt(p.kmSat)}</td></tr>
+      <tr><td>Galones</td><td class="n">${fmt(p.gal,1)}</td><td class="n">${fmt(p.gal,1)}</td></tr>
+      <tr><td>Gal/km</td><td class="n">${fmt(p.consOdo,3)}</td><td class="n">${fmt(p.consSat,3)}</td></tr>
+      <tr><td>Km/gal</td><td class="n">${fmt(p.kmgalOdo,2)}</td><td class="n">${fmt(p.kmgalSat,2)}</td></tr>
+      <tr><td>Estándar del vehículo (gal/km)</td><td class="n">${fmt(v.std,3)}</td><td class="n">${fmt(v.std,3)}</td></tr>
+      <tr><td>Desviación vs estándar</td><td class="n">${sg(p.devOdo)}</td><td class="n">${sg(p.devSat)}</td></tr>
+      <tr><td>Diferencia en galones vs estándar</td><td class="n">${p.kmOdo>0?sgal(p.gal-p.kmOdo*v.std):'—'}</td><td class="n">${p.kmSat>0?sgal(p.gal-p.kmSat*v.std):'—'}</td></tr>
+    </table></div>
+    ${p.fraseCons?`<p class="msg">${esc(p.fraseCons)}</p>`:''}
+
+    <h3>Combustible, viajes y costo del período</h3>
+    <div class="wrap"><table class="tbl">
+      <tr><td>Galones consumidos en el período</td><td class="n">${fmt(p.gal,1)} gal</td></tr>
+      <tr><td>Precio promedio por galón</td><td class="n">${p.precioProm==null?'<span class="muted">Sin precio registrado</span>':money(p.precioProm)}</td></tr>
+      <tr><td>Total combustible del período</td><td class="n"><b>${money(p.costo)}</b>${p.costoParcial?' <span class="muted small">(estimado: falta el precio en algún tanqueo)</span>':''}</td></tr>
+      <tr><td>Viajes realizados</td><td class="n">${p.nViajes}</td></tr>
+      <tr><td>Galones por viaje</td><td class="n">${p.nViajes?fmt(p.gal/p.nViajes,1):'—'}</td></tr>
+      <tr><td>Costo de combustible por viaje</td><td class="n">${p.costo!=null&&p.nViajes?money(p.costo/p.nViajes):'—'}</td></tr>
+      <tr><td>Costo por km (odómetro)</td><td class="n">${p.costo!=null&&p.kmOdo>0?money(p.costo/p.kmOdo):'—'}</td></tr>
+      <tr><td>Galones aprox. según rutas de los viajes</td><td class="n">${p.galAprox==null?'—':fmt(p.galAprox,1)+' gal'}${p.galAprox!=null?` <span class="muted small">(real: ${fmt(p.gal,1)} gal · diferencia ${fmt(p.gal-p.galAprox,1)} gal${p.costo!=null&&p.precioProm!=null?' ≈ '+money((p.gal-p.galAprox)*p.precioProm):''})</span>`:''}</td></tr>
+    </table></div>
+    <p class="muted small">La diferencia entre galones reales y aproximados por ruta incluye ralentí, carga, tráfico y otros factores; por sí sola no indica una irregularidad.</p>
+
+    <h3>Comparación con períodos de las mismas rutas</h3>
+    ${repHtml}
+
+    <h3>Conciliación triple</h3>
+    <div class="grid">
+      <div class="wrap"><table class="tbl"><tr><th>Fuente</th><th class="n">Km</th></tr>
+        <tr><td>A · Odómetro (físico)</td><td class="n">${fmt(p.kmOdo)}</td></tr>
+        <tr><td>B · Satrack (GPS)</td><td class="n">${fmt(p.kmSat)}</td></tr>
+        <tr><td>C · Viajes (ruta estándar)</td><td class="n">${fmt(p.kmViajes)}</td></tr>
+        <tr><td>P · Preoperacional (medición de salida)</td><td class="n">${fmt(p.kmPre)}</td></tr></table></div>
+      <div class="wrap"><table class="tbl"><tr><th>Comparación</th><th class="n">Diferencia</th></tr>
+        <tr><td>Odómetro vs Satrack</td><td class="n">${difTxt(dOS)}</td></tr>
+        <tr><td>Odómetro vs viajes</td><td class="n">${difTxt(dOV)}</td></tr>
+        <tr><td>Satrack vs viajes</td><td class="n">${difTxt(dSV)}</td></tr>
+        <tr><td>Preoperacional vs odómetro</td><td class="n">${difTxt(p.kmPre!=null?dpair(p.kmOdo,p.kmPre):null)}</td></tr>
+        <tr><td>Preoperacional vs Satrack</td><td class="n">${difTxt(p.kmPre!=null&&p.kmSat!=null?dpair(p.kmSat,p.kmPre):null)}</td></tr>
+        <tr><td>Preoperacional vs viajes</td><td class="n">${difTxt(p.kmPre!=null&&p.kmViajes!=null?dpair(p.kmViajes,p.kmPre):null)}</td></tr></table></div>
+    </div>
+    <p class="muted small">Porcentajes respecto a la primera fuente nombrada. Los km de viajes son la distancia de ruta estándar × número de viajes.</p>
+
+    <h3>Coherencia del período</h3>
+    <div class="flow">
+      <div><b>Tanqueo A</b><br>${fd(p.A.fecha)} ${esc(p.A.hora||'')}</div><i>→</i>
+      <div><b>Odómetro inicial</b><br>${fmt(p.A.odo)} km</div><i>→</i>
+      <div><b>Viajes</b><br>${p.nViajes} · ${fmt(p.kmViajes)} km</div><i>→</i>
+      <div><b>Recorrido Satrack</b><br>${p.kmSat==null?'No disponible':fmt(p.kmSat)+' km'}</div><i>→</i>
+      <div><b>Odómetro final</b><br>${fmt(p.B.odo)} km</div><i>→</i>
+      <div><b>Tanqueo B</b><br>${fd(p.B.fecha)} ${esc(p.B.hora||'')}<br>${fmt(p.gal,1)} gal</div>
+    </div>
+    <div>${chip(cohTxt.n,cohTxt.t)}</div>
+
+    <h3>Escenarios de consumo</h3>
+    <div class="wrap"><table class="tbl">
+      <tr><th>Escenario</th><th class="n">Km base</th><th class="n">Galones esperados</th><th class="n">Galones reales</th><th class="n">Desviación</th><th class="n">Diferencia (gal)</th></tr>
+      ${p.escenarios.map(s=>`<tr><td>${esc(s.nombre)}</td><td class="n">${fmt(s.km)}</td><td class="n">${fmt(s.esp,1)}</td><td class="n">${fmt(s.real,1)}</td><td class="n">${sg(s.dev)}</td><td class="n">${sgal(s.real-s.esp)}</td></tr>`).join('')}
+    </table></div>
+    <p class="muted small">Esperado = km × estándar${p.ralPosible?' (+ horas de ralentí × '+fmt(v.ralenti,2)+' gal/h en el escenario D)':''}; en el escenario C se usa el galonaje aproximado de las rutas por vehículo. ${p.ralentiH==null?'Escenario D no disponible: falta registrar horas de ralentí. ':''}${(p.ralentiH!=null&&v.ralenti==null)?'Escenario D no disponible: falta el consumo de ralentí (gal/h) del vehículo. ':''}Modo de fuente: ${esc({comparativo:'comparativo',odometro:'odómetro',satrack:'Satrack',automatico:'automático'}[cfg.fuente])}.</p>
+
+    ${p.viajes.length?`<h3>Viajes y remisiones del período</h3>${tablaViajes(p.viajes)}`:''}
+
+    <h3>Calidad del dato</h3>
+    <div class="row">${p.fuentes.map(f=>`<span class="chip ${f[1]?'ok':'na'}">${f[1]?'✔':'✖'} ${f[0]}</span>`).join('')}</div>
+
+    <h3>Conclusión objetiva</h3>
+    <div class="concl" id="concl">${esc(conclusion(p))}</div>
+    <div class="row" style="margin-top:8px"><button class="btn sec sm" id="copiar">Copiar conclusión</button></div>
+  </div>`;
+}
+
+function tablaViajes(vs,acciones){
+  return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th>${acciones?'<th></th>':''}</tr>`+
+  vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),std=kmViaje(v);
+    const dO=o!=null&&std>0?(o-std)/std*100:null,dS=s!=null&&std>0?(s-std)/std*100:null;
+    return `<tr><td>${fdt(v.salida)}${acciones?'<br><b>'+esc(v.placa)+'</b>'+(v.conductor?' · '+esc(v.conductor):''):''}</td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${fmt(std,1)}</td><td class="n">${o==null?'—':fmt(o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td><td class="n">${fmt(s,1)}</td><td class="n">${sg(dO)}</td><td class="n">${sg(dS)}</td><td class="n">${fmt(galViaje(v),1)}</td>${acciones?`<td class="n"><button class="btn sec sm" data-ev="${v.id}">Editar</button> <button class="btn sec sm" data-dv="${v.id}">Borrar</button></td>`:''}</tr>`}).join('')+`</table></div>`;
+}
+
+/* ===================== Render: tanqueos ===================== */
+let editing=null,pend={odo:null,comp:null};
+function renderListas(){
+  $('#dl-placas').innerHTML=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].map(p=>`<option value="${esc(p)}">`).join('');
+  $('#dl-cond').innerHTML=S.conductores.map(c=>`<option value="${esc(c.nombre)}">`).join('');
+}
+function renderTanqueos(){
+  renderListas();
+  const all=analisisTodo(),rs=[...S.tanqueos].sort((a,b)=>dtT(b)-dtT(a));
+  $('#tbl-tanqueos').innerHTML=rs.length?`<tr><th>Fecha / hora</th><th>Vehículo</th><th>Conductor</th><th class="n">Odómetro</th><th class="n">Galones</th><th class="n">Precio/gal</th><th class="n">Total</th><th>Full</th><th class="n">Satrack (int.)</th><th class="n">Ralentí h</th><th>Fotos</th><th>Alertas</th><th></th></tr>`+
+  rs.map(r=>{const fl=(all[r.placa]&&all[r.placa].flags[r.id])||[];
+    return `<tr><td>${fd(r.fecha)} ${esc(r.hora||'')}</td><td><b>${esc(r.placa)}</b></td><td>${esc(r.conductor)}</td><td class="n">${fmt(r.odo)}</td><td class="n">${fmt(r.gal,2)}</td><td class="n">${isNum(r.precio)?money(r.precio):'—'}</td><td class="n">${isNum(r.precio)?money(r.gal*r.precio):'—'}</td><td>${r.full?'Sí':'No'}</td><td class="n">${fmt(num(r.satKm))}</td><td class="n">${fmt(num(r.ralentiH),1)}</td>
+    <td>${r.fotoOdo?`<button class="btn sec sm" data-foto="${r.id}:odo">Odómetro</button>`:''} ${r.fotoComp?`<button class="btn sec sm" data-foto="${r.id}:comp">Comprobante</button>`:''}</td>
+    <td>${fl.map(x=>chip(x.n,x.c)).join('<br>')||'<span class="muted">—</span>'}${r.obs?`<div class="small muted">${esc(r.obs)}</div>`:''}</td>
+    <td class="n"><button class="btn sec sm" data-et="${r.id}">Editar</button> <button class="btn sec sm" data-dt="${r.id}">Borrar</button></td></tr>`}).join(''):'';
+  $$('#tbl-tanqueos [data-foto]').forEach(b=>b.onclick=()=>verFoto(b.dataset.foto));
+  $$('#tbl-tanqueos [data-et]').forEach(b=>b.onclick=()=>editarTanqueo(b.dataset.et));
+  $$('#tbl-tanqueos [data-dt]').forEach(b=>b.onclick=()=>borrarTanqueo(b.dataset.dt));
+}
+async function verFoto(k){
+  const [id,tipo]=k.split(':'),r=S.tanqueos.find(x=>x.id===id);if(!r)return;
+  let url=null;try{url=await fGet(k)}catch(e){}
+  $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tipo==='odo'?'Foto del odómetro':'Comprobante de combustible'}</h3>
+    <p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmt(r.gal,2)} gal${r.full?' (full)':''} · Conductor ${esc(r.conductor)}</p>
+    ${url?`<img src="${url}" alt="Foto">`:'<p class="muted">La imagen no está disponible en este navegador.</p>'}`;
+  $('#dlg').showModal();
+}
+function limpiarFormTanqueo(){
+  editing=null;pend={odo:null,comp:null};$('#f-tanqueo').reset();$('#t-full').checked=true;
+  $('#p-odo').textContent='';$('#p-comp').textContent='';$('#t-live').innerHTML='';$('#t-total').textContent='';
+  $('#t-titulo').textContent='Registrar tanqueo';$('#t-cancelar').hidden=true;$('#t-guardar').textContent='Guardar tanqueo';
+  const n=new Date();
+  $('#t-fecha').value=n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());$('#t-hora').value=pad(n.getHours())+':'+pad(n.getMinutes());
+}
+function editarTanqueo(id){
+  const r=S.tanqueos.find(x=>x.id===id);if(!r)return;editing=id;pend={odo:null,comp:null};
+  $('#t-fecha').value=r.fecha;$('#t-hora').value=r.hora||'';$('#t-placa').value=r.placa;$('#t-conductor').value=r.conductor;
+  $('#t-odo').value=r.odo;$('#t-gal').value=r.gal;$('#t-precio').value=r.precio??'';totalLive();$('#t-full').checked=!!r.full;$('#t-sat').value=r.satKm??'';$('#t-ralenti').value=r.ralentiH??'';$('#t-obs').value=r.obs||'';
+  $('#p-odo').textContent=r.fotoOdo?'Foto del odómetro ya adjunta (suba otra para reemplazarla)':'';
+  $('#p-comp').textContent=r.fotoComp?'Comprobante ya adjunto (suba otro para reemplazarlo)':'';
+  $('#t-titulo').textContent='Editar tanqueo';$('#t-cancelar').hidden=false;$('#t-guardar').textContent='Guardar cambios';
+  liveCheck();window.scrollTo({top:0,behavior:'smooth'});
+}
+async function borrarTanqueo(id){
+  if(!confirm('¿Borrar este registro de tanqueo? Esta acción es manual y no se puede deshacer.'))return;
+  S.tanqueos=S.tanqueos.filter(x=>x.id!==id);fDel(id+':odo');fDel(id+':comp');save();renderAll();toast('Registro borrado');
+}
+function totalLive(){const g=num($('#t-gal').value),p=num($('#t-precio').value);$('#t-total').textContent=(g!=null&&p!=null)?'Total del tanqueo: '+money(g*p):''}
+function liveCheck(){
+  const placa=normPlaca($('#t-placa').value),odo=num($('#t-odo').value),f=$('#t-fecha').value,h=$('#t-hora').value||'00:00';
+  const box=$('#t-live');box.innerHTML='';if(!placa||odo==null||!f)return;
+  const t=new Date(f+'T'+h).getTime(),rs=recsOf(placa).filter(r=>r.id!==editing);
+  const prev=[...rs].reverse().find(r=>dtT(r)<=t),next=rs.find(r=>dtT(r)>t),out=[];
+  if(prev&&odo<prev.odo)out.push(chip('err','ERROR DE LECTURA')+' El kilometraje final es inferior al kilometraje inicial ('+fmt(prev.odo)+' km). Verificar digitación, fotografía del odómetro o posible inconsistencia del registro.');
+  else if(prev){
+    const ds=rs.map((r,i)=>i?r.odo-rs[i-1].odo:null).filter(x=>x!=null&&x>0),d=odo-prev.odo;
+    if(ds.length>=S.config.saltoMin){const m=median(ds);if(m>0&&d>m*S.config.saltoFactor)out.push(chip('err','SALTO ANORMAL DE ODÓMETRO')+' Avance de '+fmt(d)+' km frente a una mediana de '+fmt(m)+' km. Se solicitará revisión.')}
+    if(d===0)out.push(chip('warn','SIN AVANCE')+' El odómetro no avanzó respecto al registro anterior.');
+  }
+  if(next&&odo>next.odo)out.push(chip('err','INCONSISTENTE')+' La lectura supera la del registro siguiente ('+fmt(next.odo)+' km).');
+  box.innerHTML=out.map(x=>`<div>${x}</div>`).join('');
+}
+async function guardarTanqueo(ev){
+  ev.preventDefault();
+  const r={id:editing||uid(),fecha:$('#t-fecha').value,hora:$('#t-hora').value,placa:normPlaca($('#t-placa').value),conductor:$('#t-conductor').value.trim(),
+    odo:num($('#t-odo').value),gal:num($('#t-gal').value),precio:num($('#t-precio').value),full:$('#t-full').checked,satKm:num($('#t-sat').value),ralentiH:num($('#t-ralenti').value),obs:$('#t-obs').value.trim()};
+  if(!r.placa||r.odo==null||r.gal==null||!r.fecha||!r.hora||!r.conductor){toast('Complete los campos obligatorios');return}
+  if($('#t-live').textContent.includes('ERROR DE LECTURA')||$('#t-live').textContent.includes('INCONSISTENTE')){
+    if(!confirm('La lectura del odómetro presenta una inconsistencia. El registro se guardará marcado para revisión, sin modificar ni descartar el dato. ¿Continuar?'))return;
+  }
+  const prev=editing?S.tanqueos.find(x=>x.id===editing):null;
+  r.fotoOdo=!!(pend.odo||(prev&&prev.fotoOdo));r.fotoComp=!!(pend.comp||(prev&&prev.fotoComp));
+  try{if(pend.odo)await fPut(r.id+':odo',pend.odo);if(pend.comp)await fPut(r.id+':comp',pend.comp)}
+  catch(e){toast('No se pudieron guardar las fotos en este navegador');r.fotoOdo=!!(prev&&prev.fotoOdo);r.fotoComp=!!(prev&&prev.fotoComp)}
+  if(editing)S.tanqueos=S.tanqueos.map(x=>x.id===editing?r:x);else S.tanqueos.push(r);
+  let aviso=null;
+  if(!S.vehiculos.find(v=>v.placa===r.placa)){S.vehiculos.push({placa:r.placa,capacidad:null,std:0.15,ralenti:null});aviso='Vehículo '+r.placa+' agregado con estándar inicial 0,150 gal/km: calibrar en Configuración'}
+  save();limpiarFormTanqueo();renderAll();toast(aviso||'Tanqueo guardado');
+}
+function fotoInput(btn,input,key,out){
+  $(btn).onclick=()=>$(input).click();
+  $(input).onchange=async e=>{const f=e.target.files[0];if(!f)return;
+    try{pend[key]=await compress(f);$(out).textContent='Foto lista: '+f.name}catch(x){toast('No se pudo leer la imagen')}e.target.value=''};
+}
+
+/* ===================== Render: viajes ===================== */
+let editingV=null;
+function renderViajes(){
+  renderListas();
+  const vs=[...S.viajes].sort((a,b)=>dtV(b)-dtV(a));
+  renderRutaSelect();
+  $('#viajes-host').innerHTML=vs.length?tablaViajes(vs,true):'<p class="muted">Aún no hay viajes registrados.</p>';
+  $('#viajes-dia').innerHTML=resumenDia(vs)||'<p class="muted">Aún no hay viajes registrados.</p>';
+  $$('#tab-viajes [data-ev]').forEach(b=>b.onclick=()=>editarViaje(b.dataset.ev));
+  $$('#tab-viajes [data-dv]').forEach(b=>b.onclick=()=>{if(confirm('¿Borrar este viaje?')){S.viajes=S.viajes.filter(x=>x.id!==b.dataset.dv);save();renderAll()}});
+}
+function resumenDia(vs){
+  if(!vs.length)return '';
+  const g={};vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;(g[k]=g[k]||[]).push(v)});
+  return `<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th class="n">Rutas</th><th class="n">Viajes</th><th>Rutas y remisiones</th><th class="n">Km estándar</th><th class="n">Gal. aprox.</th></tr>`+
+  Object.keys(g).sort().reverse().map(k=>{const a=g[k],[f,pl]=k.split('|');
+    return `<tr><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td class="n">${a.length}</td><td class="n">${a.reduce((s,v)=>s+nV(v),0)}</td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}</td><td class="n">${fmt(a.reduce((s,v)=>s+kmViaje(v),0),1)}</td><td class="n">${fmt(a.reduce((s,v)=>s+galViaje(v),0),1)}</td></tr>`}).join('')+`</table></div>`;
+}
+function renderRutaSelect(){
+  const sel=$('#v-ruta'),cur=sel.value;
+  sel.innerHTML='<option value="">— Seleccione la ruta —</option>'+S.rutas.map(r=>`<option value="${esc(r.id)}">${esc(r.nombre)} · ${fmt(r.km,1)} km</option>`).join('')+'<option value="__otra">Otra ruta (no catalogada)</option>';
+  if([...sel.options].some(o=>o.value===cur))sel.value=cur;
+  $('#v-vacio').hidden=S.rutas.length>0;
+  rutaCambio(true);
+}
+function rutaCambio(sinKm){
+  const v=$('#v-ruta').value,r=S.rutas.find(x=>x.id===v);
+  $('#v-otra-w').hidden=v!=='__otra';
+  if(r&&!sinKm)$('#v-kmruta').value=r.km;
+  liveViaje();
+}
+function liveViaje(){
+  const pl=normPlaca($('#v-placa').value),km=num($('#v-kmruta').value),r=S.rutas.find(x=>x.id===$('#v-ruta').value),n=Math.max(1,num($('#v-nv').value)||1),std=vehiculo(pl).std;
+  if(km==null){$('#v-live').textContent='';return}
+  const g=galManual(r,pl),unit=g!=null?g:km*std;
+  $('#v-live').textContent='Galonaje aproximado: '+fmt(unit,1)+' gal por viaje'+(n>1?' · '+fmt(unit*n,1)+' gal en '+n+' viajes':'')+(g!=null?' (valor definido para la ruta)':' (km estándar × '+fmt(std,3)+' gal/km'+(pl?'':', consumo de referencia')+')');
+}
+function editarViaje(id){
+  const v=S.viajes.find(x=>x.id===id);if(!v)return;editingV=id;
+  const enCat=v.rutaId&&S.rutas.some(r=>r.id===v.rutaId);
+  renderRutaSelect();
+  $('#v-ruta').value=enCat?v.rutaId:'__otra';$('#v-ruta-otra').value=enCat?'':v.ruta;$('#v-remision').value=v.remision||'';$('#v-nv').value=nV(v);$('#v-cond').value=v.conductor||'';
+  $('#v-salida').value=v.salida;$('#v-placa').value=v.placa;$('#v-kmruta').value=v.kmRuta;$('#v-oi').value=v.odoIni??'';$('#v-of').value=v.odoFin??'';$('#v-sat').value=v.satKm??'';
+  rutaCambio(true);
+  $('#v-cancelar').hidden=false;window.scrollTo({top:0,behavior:'smooth'});
+}
+function guardarViaje(ev,otra){
+  ev.preventDefault();
+  const r=S.rutas.find(x=>x.id===$('#v-ruta').value),nombre=r?r.nombre:($('#v-ruta').value==='__otra'?$('#v-ruta-otra').value.trim():'');
+  const v={id:editingV||uid(),salida:$('#v-salida').value,placa:normPlaca($('#v-placa').value),conductor:$('#v-cond').value.trim(),rutaId:r?r.id:null,ruta:nombre,remision:$('#v-remision').value.trim(),nViajes:Math.max(1,Math.round(num($('#v-nv').value)||1)),kmRuta:num($('#v-kmruta').value),odoIni:num($('#v-oi').value),odoFin:num($('#v-of').value),satKm:num($('#v-sat').value)};
+  if(!v.salida||!v.placa||!v.ruta||v.kmRuta==null){toast('Complete los campos obligatorios (incluida la ruta)');return}
+  if(v.odoIni!=null&&v.odoFin!=null&&v.odoFin<v.odoIni&&!confirm('El odómetro final del viaje es inferior al inicial. Se guardará marcado para revisión. ¿Continuar?'))return;
+  if(editingV)S.viajes=S.viajes.map(x=>x.id===editingV?v:x);else S.viajes.push(v);
+  const keep=otra?{s:v.salida,p:v.placa,c:v.conductor}:null;
+  editingV=null;$('#f-viaje').reset();$('#v-cancelar').hidden=true;
+  if(keep){$('#v-salida').value=keep.s;$('#v-placa').value=keep.p;$('#v-cond').value=keep.c}
+  save();renderAll();toast(keep?'Viaje guardado: agregue la siguiente ruta del día':'Viaje guardado');
+}
+
+/* ===================== Informe Satrack ===================== */
+const KEYS={placa:/placa|vehiculo|unidad|movil|alias/,desde:/desde|inicio|inicial|fecha|hora/,hasta:/hasta|fin\b|final/,km:/recorrid|distancia|kilomet|\bkms?\b/,ral:/ralent|idle|detenid/};
+function detectarCols(hdr){
+  const h=hdr.map(norm),f=(re,ex)=>h.findIndex((x,i)=>re.test(x)&&!(ex||[]).includes(i));
+  const placa=f(KEYS.placa),hasta=f(KEYS.hasta,[placa]),ral=f(KEYS.ral);
+  let km=h.findIndex((x,i)=>/recorrid|distancia/.test(x)&&i!==ral);if(km<0)km=f(KEYS.km,[ral]);
+  const desde=h.findIndex((x,i)=>KEYS.desde.test(x)&&![placa,hasta,ral,km].includes(i)&&!/fin\b|hasta|final/.test(x));
+  return{placa,desde,hasta,km,ral};
+}
+function detDelim(t){const l=t.split(/\r?\n/).slice(0,3).join('\n');const c=d=>(l.split(d).length-1);const o=[[';',c(';')],['\t',c('\t')],[',',c(',')]].sort((a,b)=>b[1]-a[1]);return o[0][1]?o[0][0]:';'}
+function parseCSV(t){
+  t=t.replace(/^﻿/,'');const d=detDelim(t),rows=[];let row=[],c='',q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+    else if(ch==='"')q=true;else if(ch===d){row.push(c);c=''}else if(ch==='\n'){row.push(c);rows.push(row);row=[];c=''}else if(ch!=='\r')c+=ch}
+  row.push(c);rows.push(row);return rows.filter(r=>r.some(x=>String(x).trim()!==''));
+}
+function parseKm(s){
+  if(typeof s==='number')return isNaN(s)?null:s;
+  s=String(s==null?'':s).replace(/[^\d.,\-]/g,'');if(!s)return null;
+  if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');
+  const n=Number(s);return isNaN(n)?null:n;
+}
+function parseHoras(v,unidad){
+  if(v==null||v==='')return null;
+  if(typeof v==='string'&&v.includes(':')){const p=v.trim().split(':').map(Number);if(p.some(isNaN))return null;return p[0]+(p[1]||0)/60+(p[2]||0)/3600}
+  const n=parseKm(v);return n==null?null:(unidad==='min'?n/60:n);
+}
+function parseFecha(v){
+  const mk=(y,mo,d,h,mi,solo)=>({iso:`${y}-${pad(mo)}-${pad(d)}T${pad(h||0)}:${pad(mi||0)}`,solo});
+  if(v instanceof Date&&!isNaN(v))return mk(v.getFullYear(),v.getMonth()+1,v.getDate(),v.getHours(),v.getMinutes(),v.getHours()===0&&v.getMinutes()===0);
+  if(typeof v==='number'&&v>20000&&v<80000){const u=new Date(Math.round((v-25569)*864e5));return mk(u.getUTCFullYear(),u.getUTCMonth()+1,u.getUTCDate(),u.getUTCHours(),u.getUTCMinutes(),Number.isInteger(v))}
+  const s=String(v==null?'':v).trim();if(!s)return null;
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+  if(m)return mk(m[1],+m[2],+m[3],m[4]?+m[4]:0,m[5]?+m[5]:0,!m[4]);
+  m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[T\s,]+(\d{1,2}):(\d{2}))?/);
+  if(m)return mk(m[3],+m[2],+m[1],m[4]?+m[4]:0,m[5]?+m[5]:0,!m[4]);
+  return null;
+}
+function filaSat(r,m,lote,unidad){
+  const placa=normPlaca(r[m.placa]);if(!placa||placa.includes('TOTAL'))return null;
+  const d=parseFecha(r[m.desde]),km=parseKm(r[m.km]);if(!d||km==null)return null;
+  const h=m.hasta>=0?parseFecha(r[m.hasta]):null,day0=iso=>new Date(iso.slice(0,10)+'T00:00').getTime();
+  let t0=d.solo?day0(d.iso):new Date(d.iso).getTime(),t1;
+  if(h)t1=h.solo?day0(h.iso)+DIA-60000:new Date(h.iso).getTime();else t1=d.solo?t0+DIA-60000:t0;
+  if(t1<t0)[t0,t1]=[t1,t0];
+  return{id:uid(),placa,t0,t1,km,ralentiH:m.ral>=0?parseHoras(r[m.ral],unidad):null,lote};
+}
+let satPrev=null;
+function satArchivo(file){
+  const nombre=file.name,ext=nombre.split('.').pop().toLowerCase(),fin=rows=>{satPrev={nombre,rows,file};satMapear()};
+  if(ext==='pdf'){if(typeof pdfjsLib==='undefined')return toast('Leer PDF requiere conexión a internet (pdf.js)');pdfRows(file).then(fin).catch(()=>toast('No se pudo leer el PDF (¿es un escaneo sin texto?). Use el Excel o CSV.'));return}
+  const rd=new FileReader();
+  if(ext==='csv'||ext==='txt'){rd.onload=()=>fin(parseCSV(rd.result));rd.readAsText(file,'UTF-8')}
+  else if(typeof XLSX!=='undefined'){rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array',cellDates:true}),ws=wb.Sheets[wb.SheetNames[0]];fin(XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''}))}catch(e){toast('No se pudo leer el archivo Excel')}};rd.readAsArrayBuffer(file)}
+  else toast('Para leer Excel se requiere conexión a internet; guarde el informe como CSV');
+}
+function satMapear(hRow){
+  const rows=satPrev.rows;let bi=hRow!=null?hRow:-1;
+  if(bi<0){let best=0;for(let i=0;i<Math.min(20,rows.length);i++){const c=detectarCols(rows[i]),sc=[c.placa,c.desde,c.km].filter(x=>x>=0).length;if(sc>best){best=sc;bi=i}}if(bi<0)bi=0}
+  satPrev.h=bi;const hdr=rows[bi].map(x=>String(x)),c=detectarCols(hdr);
+  const opt=(sel,none)=>(none?'<option value="-1">(ninguna)</option>':'')+hdr.map((x,i)=>`<option value="${i}" ${i===sel?'selected':''}>${i+1}. ${esc(x||'(sin nombre)')}</option>`).join('');
+  $('#sat-map').innerHTML=`<p class="small"><b>${esc(satPrev.nombre)}</b> · ${rows.length-bi-1} filas de datos</p>
+  <div class="grid">
+    <div><label>Fila de encabezados</label><input type="number" id="sm-h" min="1" value="${bi+1}"></div>
+    <div><label>Placa / vehículo *</label><select id="sm-placa">${opt(c.placa)}</select></div>
+    <div><label>Fecha y hora de inicio (o fecha) *</label><select id="sm-desde">${opt(c.desde)}</select></div>
+    <div><label>Fecha y hora de fin (opcional)</label><select id="sm-hasta">${opt(c.hasta,true)}</select></div>
+    <div><label>Km recorridos *</label><select id="sm-km">${opt(c.km)}</select></div>
+    <div><label>Ralentí (opcional)</label><select id="sm-ral">${opt(c.ral,true)}</select></div>
+    <div><label>Unidad del ralentí</label><select id="sm-un"><option value="h">Horas (o hh:mm:ss)</option><option value="min">Minutos</option></select></div>
+  </div>
+  <div id="sm-prev" style="margin-top:10px"></div>
+  <div class="row" style="margin-top:10px"><button class="btn" type="button" id="sm-ok">Importar al sistema</button><button class="btn sec" type="button" id="sm-x">Cancelar</button></div>`;
+  const read=()=>({placa:+$('#sm-placa').value,desde:+$('#sm-desde').value,hasta:+$('#sm-hasta').value,km:+$('#sm-km').value,ral:+$('#sm-ral').value}),un=()=>$('#sm-un').value;
+  const prev=()=>{const m=read();const data=satPrev.rows.slice(satPrev.h+1);const ok=data.map(r=>filaSat(r,m,'x',un())).filter(Boolean);
+    $('#sm-prev').innerHTML=`<p class="small muted">${ok.length} de ${data.length} filas reconocidas. Vista previa:</p><div class="wrap"><table class="tbl"><tr><th>Placa</th><th>Intervalo</th><th class="n">Km</th><th class="n">Ralentí h</th></tr>${ok.slice(0,5).map(s=>`<tr><td>${esc(s.placa)}</td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td class="n">${fmt(s.ralentiH,1)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">No se reconoció ninguna fila: revise las columnas.</td></tr>'}</table></div>`};
+  ['#sm-placa','#sm-desde','#sm-hasta','#sm-km','#sm-ral','#sm-un'].forEach(s=>$(s).onchange=prev);
+  $('#sm-h').onchange=()=>satMapear(Math.max(0,(+$('#sm-h').value||1)-1));
+  $('#sm-x').onclick=()=>{satPrev=null;$('#sat-map').innerHTML=''};
+  $('#sm-ok').onclick=()=>satImportar(read(),un());
+  prev();
+}
+const rangoTxt=s=>{const a=new Date(s.t0),b=new Date(s.t1),dia=x=>x.getHours()===0&&x.getMinutes()===0;
+  if(dia(a)&&b.getHours()===23&&b.getMinutes()===59){return fTd(s.t0)===fTd(s.t1)?fTd(s.t0):fTd(s.t0)+' – '+fTd(s.t1)}
+  return s.t0===s.t1?fT(s.t0):fT(s.t0)+' – '+fT(s.t1)};
+function satImportar(m,unidad){
+  if(m.placa<0||m.desde<0||m.km<0){toast('Indique las columnas de placa, fecha y km');return}
+  const lote=uid(),data=satPrev.rows.slice(satPrev.h+1);let nu=0,up=0,om=0;const desc=new Set();
+  data.forEach(r=>{const s=filaSat(r,m,lote,unidad);if(!s){om++;return}
+    const ex=S.satrack.find(x=>x.placa===s.placa&&x.t0===s.t0&&x.t1===s.t1);
+    if(ex){ex.km=s.km;ex.ralentiH=s.ralentiH;ex.lote=lote;up++}else{S.satrack.push(s);nu++}
+    if(!S.vehiculos.find(v=>v.placa===s.placa)&&!S.tanqueos.some(t=>t.placa===s.placa))desc.add(s.placa);
+  });
+  if(!nu&&!up){toast('No se importó ninguna fila: revise las columnas');return}
+  S.satLotes.push({id:lote,archivo:satPrev.nombre,fecha:new Date().toISOString().slice(0,16)});subirArchivoSat(lote,satPrev.file);
+  satPrev=null;$('#sat-map').innerHTML='';save();renderAll();
+  toast(nu+' registros nuevos, '+up+' actualizados'+(om?', '+om+' filas omitidas':'')+(desc.size?'. Placas sin tanqueos aún: '+[...desc].slice(0,5).join(', '):''));
+}
+function renderSatrack(){
+  const lotes=S.satLotes;
+  $('#tbl-lotes').innerHTML=lotes.length?`<tr><th>Archivo</th><th>Cargado</th><th class="n">Registros vigentes</th><th></th></tr>`+lotes.map(l=>`<tr><td>${l.url?`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.archivo)}</a>`:esc(l.archivo)}</td><td>${fdt(l.fecha)}</td><td class="n">${S.satrack.filter(s=>s.lote===l.id).length}</td><td class="n"><button class="btn sec sm" data-dl="${l.id}">Eliminar registros</button></td></tr>`).join(''):'<tr><td class="muted">Aún no se ha cargado ningún informe de Satrack.</td></tr>';
+  $$('#tbl-lotes [data-dl]').forEach(b=>b.onclick=()=>{if(confirm('¿Eliminar los registros de este informe? Los tanqueos y viajes no se tocan.')){S.satrack=S.satrack.filter(s=>s.lote!==b.dataset.dl);S.satLotes=S.satLotes.filter(l=>l.id!==b.dataset.dl);save();renderAll()}});
+  const sel=$('#sat-placa'),cur=sel.value,pl=[...new Set(S.satrack.map(s=>s.placa))].sort();
+  sel.innerHTML='<option value="">Toda la flota</option>'+pl.map(p=>`<option>${esc(p)}</option>`).join('');if(pl.includes(cur))sel.value=cur;
+  const rows=S.satrack.filter(s=>!sel.value||s.placa===sel.value).sort((a,b)=>b.t0-a.t0);
+  $('#tbl-sat').innerHTML=rows.length?`<tr><th>Vehículo</th><th>Intervalo</th><th class="n">Km Satrack</th><th class="n">Ralentí h</th><th class="n">Viajes</th><th class="n">Km viajes (ruta)</th><th class="n">Satrack vs viajes</th><th class="n">Gal. aprox.</th></tr>`+rows.slice(0,400).map(s=>{
+    const tv=S.viajes.filter(v=>v.placa===s.placa&&dtV(v)>=s.t0&&dtV(v)<=s.t1),km=tv.reduce((a,v)=>a+kmViaje(v),0),dif=km>0?(s.km-km)/km*100:null;
+    return `<tr><td><b>${esc(s.placa)}</b></td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td class="n">${fmt(s.ralentiH,1)}</td><td class="n">${tv.reduce((a,v)=>a+nV(v),0)}</td><td class="n">${tv.length?fmt(km,1):'—'}</td><td class="n ${Math.abs(dif)>S.config.tolPct?'bad':''}">${sg(dif)}</td><td class="n">${tv.length?fmt(tv.reduce((a,v)=>a+galViaje(v),0),1):'—'}</td></tr>`}).join(''):'<tr><td class="muted">Sin registros de Satrack.</td></tr>';
+}
+
+/* ===================== Gerencial ===================== */
+let ch1=null,ch2=null;
+const PAL=()=>['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'].map(v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function renderGerencial(){
+  const mesSel=$('#g-mes').value,plSel=$('#g-placa').value,modo=S.config.baseKm;
+  const pls=[...new Set(S.tanqueos.map(r=>r.placa))].sort(),cur=plSel;
+  $('#g-placa').innerHTML='<option value="">Toda la flota</option>'+pls.map(p=>`<option>${esc(p)}</option>`).join('');if(pls.includes(cur))$('#g-placa').value=cur;
+  const placa=$('#g-placa').value;
+  const per=periodosFiltrados(mesSel,placa),tq=S.tanqueos.filter(r=>(!mesSel||r.fecha.startsWith(mesSel))&&(!placa||r.placa===placa));
+  const a=agg(per,modo),gal=tq.reduce((s,r)=>s+(r.gal||0),0),conP=tq.filter(r=>isNum(r.precio)),gasto=conP.reduce((s,r)=>s+r.gal*r.precio,0),galConP=conP.reduce((s,r)=>s+r.gal,0);
+  const kp=(t,v,s,cls)=>`<div class="kpi"><span>${t}</span><b class="${cls||''}">${v}</b>${s?`<span>${s}</span>`:''}</div>`;
+  $('#g-kpis').innerHTML=
+    kp('Gasto en combustible',gasto?money(gasto):'—',gasto?'precio prom. '+money(gasto/galConP)+'/gal':'sin precios registrados')+
+    kp('Galones tanqueados',fmt(gal,1),tq.length+' tanqueos')+
+    kp('Km recorridos ('+BASES[modo]+')',fmt(a.km),a.n+' períodos'+(a.sinDato?' · '+a.sinDato+' sin dato':''))+
+    kp('Gal/km real',fmt(a.galkm,3),'estándar ponderado '+(a.km>0?fmt(a.esp/a.km,3):'—'))+
+    kp('Rendimiento',fmt(a.kmgal,2)+' km/gal')+
+    kp('Desviación vs estándar',sg(a.desv),fmt(a.sobreGal,1)+' gal',a.desv>S.config.tolConsumo?'bad':'')+
+    kp('Sobreconsumo estimado',money(a.sobreCosto),a.sobreCosto!=null?'a precio promedio del período':'requiere precios')+
+    kp('Costo por km',money(a.costoKm))+
+    kp('Viajes',a.nViajes,a.galViaje!=null?fmt(a.galViaje,1)+' gal/viaje':'')+
+    kp('Costo por viaje',money(a.costoViaje));
+  $('#g-nota').textContent='Indicadores calculados con los períodos que cierran en '+mesTxt(mesSel)+(placa?' del vehículo '+placa:'')+', usando como base los km de: '+BASES[modo].toLowerCase()+'. El sobreconsumo es la diferencia contra el estándar de cada vehículo y no implica por sí solo una irregularidad.';
+  $('#g-ranking').innerHTML=tablaVehiculos(per,tq,modo);
+  const al=alertas(per,modo);
+  $('#g-alertas').innerHTML=al.length?al.slice(0,40).map(x=>`<div class="alerta" data-k="${esc(x.key)}">${chip(x.n==='err'?'err':x.n,x.n==='err'?'ERROR':x.n==='crit'?'CRÍTICO':'REVISAR')}<div class="small">${esc(x.t)}</div></div>`).join(''):'<p class="muted">Sin alertas con los filtros actuales.</p>';
+  $$('#g-alertas .alerta').forEach(d=>d.onclick=()=>{selKey=d.dataset.k;goTab('resumen');renderResumen();$('#detalle').scrollIntoView({behavior:'smooth'})});
+  dibujarGraficos(mesSel,placa,modo);dibujarDim(per,modo);
+}
+function dibujarGraficos(mesSel,placa,modo){
+  if(ch1){ch1.destroy();ch1=null}if(ch2){ch2.destroy();ch2=null}
+  $('#g-m2').innerHTML='Barras rojas: fuera de la tolerancia de consumo ('+fmt(S.config.tolConsumo,1)+' %). Azul: dentro de tolerancia. Las líneas punteadas marcan ± la tolerancia.';
+  if(typeof Chart==='undefined'){$('#g-m1').textContent='No se pudo cargar Chart.js (los gráficos requieren conexión a internet). Los indicadores y tablas funcionan sin conexión.';return}
+  const pal=PAL(),ink=css('--muted'),grid=css('--grid'),axis=css('--axis');
+  Chart.defaults.color=ink;Chart.defaults.font.family='system-ui,-apple-system,"Segoe UI",sans-serif';
+  const tq=S.tanqueos.filter(r=>(!placa||r.placa===placa)&&isNum(r.precio));
+  const ms=[...new Set(tq.map(r=>r.fecha.slice(0,7)))].sort(),pl=[...new Set(tq.map(r=>r.placa))].sort();
+  $('#g-m1').textContent=ms.length?'Compras de combustible (galones × precio) por mes y vehículo.':'Registre el precio por galón en los tanqueos para ver el gasto por mes.';
+  if(ms.length){
+    ch1=new Chart($('#g-c1'),{type:'bar',data:{labels:ms.map(mesTxt),datasets:pl.map((p,i)=>({label:p,data:ms.map(m=>tq.filter(r=>r.placa===p&&r.fecha.startsWith(m)).reduce((s,r)=>s+r.gal*r.precio,0)),backgroundColor:pal[i%8],borderColor:css('--card'),borderWidth:2,borderRadius:4}))},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:pl.length>1},tooltip:{callbacks:{label:c=>c.dataset.label+': '+money(c.parsed.y)}}},scales:{x:{stacked:true,grid:{display:false},border:{color:axis}},y:{stacked:true,grid:{color:grid},border:{display:false},ticks:{callback:v=>money(v)}}}}});
+  }
+  const per=periodosFiltrados(mesSel,placa).map(p=>{const km=kmBase(p,modo);return km?{p,dev:(p.gal-km*p.veh.std)/(km*p.veh.std)*100}:null}).filter(Boolean),tc=S.config.tolConsumo;
+  if(per.length){
+    const lab=per.map(x=>x.p.placa+' · '+fd(x.p.B.fecha).slice(0,5));
+    ch2=new Chart($('#g-c2'),{data:{labels:lab,datasets:[
+      {type:'bar',label:'Desviación %',data:per.map(x=>+x.dev.toFixed(1)),backgroundColor:per.map(x=>Math.abs(x.dev)>tc?css('--bad'):pal[0]),borderRadius:4,order:2},
+      {type:'line',label:'+ tolerancia',data:per.map(()=>tc),borderColor:axis,borderDash:[5,4],pointRadius:0,borderWidth:2,order:1},
+      {type:'line',label:'− tolerancia',data:per.map(()=>-tc),borderColor:axis,borderDash:[5,4],pointRadius:0,borderWidth:2,order:1}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y,1)+' %'}}},scales:{x:{grid:{display:false},border:{color:axis}},y:{grid:{color:grid},border:{display:false},ticks:{callback:v=>v+' %'}}}}});
+  }
+}
+
+/* ===================== Configuración ===================== */
+let editingR=null,editingC=null;
+function renderRutas(){
+  const t=$('#tbl-rutas'),vs=S.vehiculos;
+  t.innerHTML=S.rutas.length?`<tr><th>Ruta</th><th class="n">Km estándar</th><th>Galones por viaje, por vehículo</th><th>Notas</th><th></th></tr>`+
+    S.rutas.map(r=>`<tr><td><b>${esc(r.nombre)}</b></td><td class="n">${fmt(r.km,1)}</td><td class="small">${vs.length?vs.map(v=>{const m=galManual(r,v.placa);return '<b>'+esc(v.placa)+'</b>: '+fmt(galRuta(r,v.placa,v.std),1)+(m!=null?' <span class="chip na">fijo</span>':'')}).join(' · '):'Sin vehículos registrados'}</td><td>${esc(r.nota||'')}</td><td class="n"><button class="btn sec sm" data-er="${esc(r.id)}">Editar</button> <button class="btn sec sm" data-dr="${esc(r.id)}">Quitar</button></td></tr>`).join(''):
+    '<tr><td class="muted">Aún no hay rutas. Cree la primera abajo o pegue varias en "Importar varias rutas".</td></tr>';
+  t.querySelectorAll('[data-er]').forEach(b=>b.onclick=()=>{const r=S.rutas.find(x=>x.id===b.dataset.er);editingR=r.id;$('#r-nombre').value=r.nombre;$('#r-km').value=r.km;$('#r-gal').value=r.galFijo??'';$('#r-nota').value=r.nota||'';renderRutaVeh(r);$('#r-titulo').textContent='Editar ruta';$('#r-cancelar').hidden=false;$('#r-guardar').textContent='Guardar cambios';$('#r-nombre').scrollIntoView({behavior:'smooth',block:'center'})});
+  t.querySelectorAll('[data-dr]').forEach(b=>b.onclick=()=>{if(confirm('¿Quitar esta ruta del catálogo? Los viajes ya registrados se conservan.')){S.rutas=S.rutas.filter(x=>x.id!==b.dataset.dr);save();renderAll()}});
+  if(editingR===null)renderRutaVeh(null);
+}
+function renderRutaVeh(r){
+  $('#r-veh').innerHTML=S.vehiculos.length?S.vehiculos.map(v=>`<div><label>${esc(v.placa)} (gal por viaje)</label><input type="number" min="0" step="0.1" data-pl="${esc(v.placa)}" value="${r&&r.galVeh&&isNum(r.galVeh[v.placa])?r.galVeh[v.placa]:''}" placeholder="auto: km × ${fmt(v.std,3)}"></div>`).join(''):'<p class="muted small">Registre vehículos para definir el galonaje por vehículo.</p>';
+}
+function resetRuta(){editingR=null;$('#f-ruta').reset();renderRutaVeh(null);$('#r-titulo').textContent='Crear o editar ruta';$('#r-cancelar').hidden=true;$('#r-guardar').textContent='Guardar ruta'}
+function bindRutas(){
+  $('#f-ruta').onsubmit=e=>{e.preventDefault();
+    const galVeh={};$$('#r-veh input').forEach(i=>{if(isNum(i.value))galVeh[i.dataset.pl]=Number(i.value)});
+    const r={id:editingR||uid(),nombre:$('#r-nombre').value.trim(),km:num($('#r-km').value),galFijo:num($('#r-gal').value),galVeh,nota:$('#r-nota').value.trim()};
+    if(!r.nombre||!r.km)return;
+    if(S.rutas.some(x=>x.id!==r.id&&norm(x.nombre)===norm(r.nombre))){toast('Ya existe una ruta con ese nombre');return}
+    if(editingR){S.rutas=S.rutas.map(x=>x.id===editingR?r:x);S.viajes.forEach(v=>{if(v.rutaId===r.id)v.ruta=r.nombre})}else S.rutas.push(r);
+    resetRuta();save();renderAll();toast('Ruta guardada')};
+  $('#r-cancelar').onclick=resetRuta;
+  $('#r-imp').onclick=()=>{let n=0,u=0;
+    $('#r-import').value.split('\n').forEach(l=>{const m=l.trim().match(/^(.+?)\s*[;\t|]\s*([\d.,]+)\s*$/);if(!m)return;const nombre=m[1].trim(),km=parseKm(m[2]);if(!nombre||!km)return;
+      const ex=S.rutas.find(x=>norm(x.nombre)===norm(nombre));if(ex){ex.km=km;u++}else{S.rutas.push({id:uid(),nombre,km,galFijo:null,galVeh:{},nota:''});n++}});
+    if(!n&&!u){toast('No se reconocieron rutas. Use el formato: Nombre ; km');return}
+    $('#r-import').value='';save();renderAll();toast(n+' ruta(s) creada(s), '+u+' actualizada(s)')};
+}
+function renderConductores(){
+  const t=$('#tbl-cond');
+  t.innerHTML=S.conductores.length?`<tr><th>Conductor</th><th>Documento</th><th>Notas</th><th class="n">Registros</th><th></th></tr>`+S.conductores.map(c=>`<tr><td><b>${esc(c.nombre)}</b></td><td>${esc(c.documento||'')}</td><td>${esc(c.nota||'')}</td><td class="n">${S.tanqueos.filter(r=>r.conductor===c.nombre).length+S.viajes.filter(v=>v.conductor===c.nombre).length}</td><td class="n"><button class="btn sec sm" data-ec="${c.id}">Editar</button> <button class="btn sec sm" data-dc="${c.id}">Eliminar</button></td></tr>`).join(''):'<tr><td class="muted">Aún no hay conductores. Cree el primero abajo.</td></tr>';
+  t.querySelectorAll('[data-ec]').forEach(b=>b.onclick=()=>{const c=S.conductores.find(x=>x.id===b.dataset.ec);editingC=c.id;$('#cd-nombre').value=c.nombre;$('#cd-doc').value=c.documento||'';$('#cd-nota').value=c.nota||'';$('#c-titulo').textContent='Editar conductor';$('#cd-cancelar').hidden=false;$('#cd-guardar').textContent='Guardar cambios';$('#cd-nombre').scrollIntoView({behavior:'smooth',block:'center'})});
+  t.querySelectorAll('[data-dc]').forEach(b=>b.onclick=()=>{if(confirm('¿Eliminar este conductor de la base? Los registros históricos conservan su nombre.')){S.conductores=S.conductores.filter(x=>x.id!==b.dataset.dc);save();renderAll()}});
+}
+function resetCond(){editingC=null;$('#f-cond').reset();$('#c-titulo').textContent='Crear o editar conductor';$('#cd-cancelar').hidden=true;$('#cd-guardar').textContent='Guardar conductor'}
+function bindConductores(){
+  $('#f-cond').onsubmit=e=>{e.preventDefault();
+    const c={id:editingC||uid(),nombre:$('#cd-nombre').value.trim(),documento:$('#cd-doc').value.trim(),nota:$('#cd-nota').value.trim()};
+    if(!c.nombre)return;
+    if(S.conductores.some(x=>x.id!==c.id&&norm(x.nombre)===norm(c.nombre))){toast('Ya existe un conductor con ese nombre');return}
+    if(editingC){const old=S.conductores.find(x=>x.id===editingC);if(old&&old.nombre!==c.nombre){S.tanqueos.forEach(r=>{if(r.conductor===old.nombre)r.conductor=c.nombre});S.viajes.forEach(v=>{if(v.conductor===old.nombre)v.conductor=c.nombre})}S.conductores=S.conductores.map(x=>x.id===editingC?c:x)}else S.conductores.push(c);
+    resetCond();save();renderAll();toast('Conductor guardado')};
+  $('#cd-cancelar').onclick=resetCond;
+}
+function renderConfig(){
+  renderRutas();renderConductores();
+  const c=S.config;
+  $('#c-tol').value=c.tolPct;$('#c-crit').value=c.critFactor;$('#c-fuente').value=c.fuente;$('#c-tolcons').value=c.tolConsumo;$('#c-tolrep').value=c.tolRepeticion;$('#c-saltof').value=c.saltoFactor;$('#c-saltom').value=c.saltoMin;
+  $('#tbl-veh').innerHTML=S.vehiculos.length?`<tr><th>Placa</th><th class="n">Capacidad (gal)</th><th class="n">Estándar (gal/km)</th><th class="n">Ralentí (gal/h)</th><th></th></tr>`+
+    S.vehiculos.map(v=>`<tr><td><b>${esc(v.placa)}</b></td><td class="n">${fmt(v.capacidad)}</td><td class="n">${fmt(v.std,3)}</td><td class="n">${fmt(v.ralenti,2)}</td><td class="n"><button class="btn sec sm" data-vh="${esc(v.placa)}">Editar</button> <button class="btn sec sm" data-vd="${esc(v.placa)}">Quitar</button></td></tr>`).join(''):'';
+  $$('#tbl-veh [data-vh]').forEach(b=>b.onclick=()=>{const v=S.vehiculos.find(x=>x.placa===b.dataset.vh);$('#vh-placa').value=v.placa;$('#vh-cap').value=v.capacidad??'';$('#vh-std').value=v.std;$('#vh-ral').value=v.ralenti??''});
+  $$('#tbl-veh [data-vd]').forEach(b=>b.onclick=()=>{if(confirm('¿Quitar el vehículo de la lista de parámetros? Los registros de tanqueo no se borran.')){S.vehiculos=S.vehiculos.filter(x=>x.placa!==b.dataset.vd);save();renderAll()}});
+}
+function bindConfig(){
+  const m={'#c-tol':'tolPct','#c-crit':'critFactor','#c-tolcons':'tolConsumo','#c-tolrep':'tolRepeticion','#c-saltof':'saltoFactor','#c-saltom':'saltoMin'};
+  Object.entries(m).forEach(([s,k])=>$(s).onchange=()=>{const v=num($(s).value);if(v==null||v<0)return renderConfig();S.config[k]=v;save();renderAll()});
+  $('#c-fuente').onchange=()=>{S.config.fuente=$('#c-fuente').value;save();renderAll()};
+  $('#f-veh').onsubmit=e=>{e.preventDefault();
+    const v={placa:normPlaca($('#vh-placa').value),capacidad:num($('#vh-cap').value),std:num($('#vh-std').value),ralenti:num($('#vh-ral').value)};
+    if(!v.placa||!v.std)return;const i=S.vehiculos.findIndex(x=>x.placa===v.placa);if(i>=0)S.vehiculos[i]=v;else S.vehiculos.push(v);
+    $('#f-veh').reset();save();renderAll();toast('Vehículo guardado')};
+  $('#d-demo').onclick=()=>{if(S.tanqueos.some(r=>r.placa==='SZW818')&&!confirm('Ya existen datos de SZW818. Se agregarán datos de ejemplo adicionales. ¿Continuar?'))return;loadDemo()};
+  $('#d-csv').onclick=exportCSV;
+  $('#d-json').onclick=()=>descargar('respaldo-km-igc.json',JSON.stringify(S,null,1),'application/json');
+  $('#d-imp').onclick=()=>$('#d-file').click();
+  $('#d-file').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.tanqueos)throw 0;if(!confirm('Esto reemplazará los datos actuales. ¿Continuar?'))return;S=normState(o);save();renderAll();toast('Respaldo importado')}catch(x){toast('Archivo no válido')}};rd.readAsText(f);e.target.value=''};
+  $('#d-borrar').onclick=()=>{if(confirm('¿Borrar TODOS los datos de este módulo? Si Google Sheets está conectado, también se borrarán allí. No se puede deshacer.')){S.tanqueos.forEach(r=>{fDel(r.id+':odo');fDel(r.id+':comp')});S=defaults();save();selKey=null;renderAll()}};
+}
+function descargar(n,txt,tipo){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:tipo+';charset=utf-8'}));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function exportCSV(){
+  const rows=[['Placa','Inicio','Fin','Km odómetro','Km Satrack','Fuente Satrack','Diferencia km','Diferencia %','Km viajes','N viajes','Galones','Precio prom. galón','Total combustible','Costo por viaje','Gal. aprox. rutas','Ralentí h','Gal/km odómetro','Gal/km Satrack','Estándar gal/km','Estado','Rutas repetidas (variación gal %)','Calidad del dato']];
+  todosPeriodos().forEach(p=>rows.push([p.placa,p.A.fecha+' '+(p.A.hora||''),p.B.fecha+' '+(p.B.hora||''),p.kmOdo,p.kmSat??'',p.fuenteSat||'',p.difAbs??'',p.difPct==null?'':p.difPct.toFixed(2),p.kmViajes??'',p.nViajes,p.gal,p.precioProm==null?'':Math.round(p.precioProm),p.costo==null?'':Math.round(p.costo),(p.costo!=null&&p.nViajes)?Math.round(p.costo/p.nViajes):'',p.galAprox==null?'':p.galAprox.toFixed(1),p.ralentiH??'',p.consOdo==null?'':p.consOdo.toFixed(4),p.consSat==null?'':p.consSat.toFixed(4),p.veh.std,p.estado.t,p.rep&&p.rep.pct!=null?p.rep.pct.toFixed(1):'',p.calidad.t]));
+  descargar('conciliacion-kilometraje.csv','﻿'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n'),'text/csv');
+}
+
+/* ===================== Datos de ejemplo ===================== */
+function loadDemo(){
+  const addV=v=>{if(!S.vehiculos.find(x=>x.placa===v.placa))S.vehiculos.push(v)};
+  addV({placa:'SZW818',capacidad:120,std:0.150,ralenti:0.8});
+  addV({placa:'DEMO01',capacidad:120,std:0.150,ralenti:0.8});
+  const k=uid();
+  S.conductores.push({id:'c1'+k,nombre:'Conductor Ejemplo 1',documento:'',nota:'Ejemplo'},{id:'c2'+k,nombre:'Conductor Ejemplo 2',documento:'',nota:'Ejemplo'});
+  const T=(id,fecha,hora,placa,odo,gal,precio,obs)=>S.tanqueos.push({id:id+k,fecha,hora,placa,conductor:'Conductor Ejemplo 1',odo,gal,precio,full:true,satKm:null,ralentiH:null,obs:obs||'',fotoOdo:false,fotoComp:false});
+  T('d0','2026-09-27','06:00','SZW818',849480,100,9300,'Ejemplo: tanqueo anterior');
+  T('d1','2026-10-01','06:00','SZW818',850000,70,9300,'Ejemplo: tanqueo inicial');
+  T('d2','2026-10-03','18:00','SZW818',850500,85,9500,'Ejemplo: tanqueo final');
+  const rA={id:'ra'+k,nombre:'EJEMPLO · Ruta A',km:95,galFijo:null,galVeh:{},nota:'Ruta de ejemplo'},rB={id:'rb'+k,nombre:'EJEMPLO · Ruta B',km:90,galFijo:null,galVeh:{SZW818:14.5},nota:'Ruta de ejemplo (galonaje fijo para SZW818)'};
+  S.rutas.push(rA,rB);
+  const V=(i,salida,r,cond,oi,of,sat)=>S.viajes.push({id:'dv'+i+k,salida,placa:'SZW818',conductor:cond,rutaId:r.id,ruta:r.nombre,remision:'REM-'+(1000+i),nViajes:1,kmRuta:r.km,odoIni:oi,odoFin:of,satKm:sat});
+  const c1='Conductor Ejemplo 1',c2='Conductor Ejemplo 2';
+  [['2026-09-27T08:00',rA,c1],['2026-09-28T08:00',rA,c1],['2026-09-28T15:00',rB,c2],['2026-09-29T08:00',rA,c1],['2026-09-30T08:00',rA,c2],['2026-09-30T15:00',rA,c1]].forEach((x,i)=>V(i,x[0],x[1],x[2],null,null,null));
+  [['2026-10-01T08:00',rA,c1,850000,850080,97],['2026-10-01T15:00',rB,c1,850080,850165,92],['2026-10-02T06:30',rA,c2,850165,850255,98],['2026-10-02T14:00',rA,c2,850255,850335,96],['2026-10-03T06:00',rA,c1,850335,850420,98],['2026-10-03T13:00',rA,c1,850420,850500,99]].forEach((x,i)=>V(10+i,x[0],x[1],x[2],x[3],x[4],x[5]));
+  const lote='demo'+k;S.satLotes.push({id:lote,archivo:'Informe de ejemplo (datos ficticios)',fecha:new Date().toISOString().slice(0,16)});
+  const sat=(f,km,ral)=>{const t0=new Date(f+'T00:00').getTime();S.satrack.push({id:uid(),placa:'SZW818',t0,t1:t0+DIA-60000,km,ralentiH:ral,lote})};
+  [['2026-09-27',130,3],['2026-09-28',140,3],['2026-09-29',125,3],['2026-09-30',135,3],['2026-10-01',190,5],['2026-10-02',195,5],['2026-10-03',195,5]].forEach(x=>sat(...x));
+  const D=(id,fecha,odo,gal,obs)=>S.tanqueos.push({id:id+k,fecha,hora:'07:00',placa:'DEMO01',conductor:'Conductor Ejemplo 2',odo,gal,precio:null,full:true,satKm:null,ralentiH:null,obs:obs||'',fotoOdo:false,fotoComp:false});
+  D('e1','2026-09-20',850000,90,'Ejemplo de secuencia');D('e2','2026-09-22',850400,70);D('e3','2026-09-25',851100,110);D('e4','2026-09-28',870000,100,'Ejemplo: salto anormal');D('e5','2026-09-30',869500,60,'Ejemplo: error de lectura');
+  save();selKey='SZW818|d2'+k;renderAll();toast('Datos de ejemplo cargados (SZW818 y DEMO01)');
+}
+
+/* ===================== IGC · Extensiones v2 ===================== */
+const U_OK='egutierrez',H_OK='29771e5389c46624628ecf43323af673545fd78ed49f5ed049678706b29ec96a';
+function sha256(s){const rr=(v,a)=>(v>>>a)|(v<<(32-a)),mp=Math.pow,mw=mp(2,32);let i,j,res='';const w0=[],asl=s.length*8;let hash=[],k=[],pc=0,isC={};
+for(let c=2;pc<64;c++){if(!isC[c]){for(i=0;i<313;i+=c)isC[i]=c;hash[pc]=(mp(c,.5)*mw)|0;k[pc++]=(mp(c,1/3)*mw)|0}}
+s+='\x80';while(s.length%64-56)s+='\x00';
+for(i=0;i<s.length;i++){j=s.charCodeAt(i);if(j>>8)return'';w0[i>>2]|=j<<((3-i)%4)*8}
+w0[w0.length]=((asl/mw)|0);w0[w0.length]=asl;
+for(j=0;j<w0.length;){const w=w0.slice(j,j+=16),old=hash;hash=hash.slice(0,8);
+ for(i=0;i<64;i++){const w15=w[i-15],w2=w[i-2],a=hash[0],e=hash[4];
+  const t1=hash[7]+(rr(e,6)^rr(e,11)^rr(e,25))+((e&hash[5])^(~e&hash[6]))+k[i]+(w[i]=(i<16)?w[i]:(w[i-16]+(rr(w15,7)^rr(w15,18)^(w15>>>3))+w[i-7]+(rr(w2,17)^rr(w2,19)^(w2>>>10))|0));
+  const t2=(rr(a,2)^rr(a,13)^rr(a,22))+((a&hash[1])^(a&hash[2])^(hash[1]&hash[2]));
+  hash=[(t1+t2)|0].concat(hash);hash[4]=(hash[4]+t1)|0}
+ for(i=0;i<8;i++)hash[i]=(hash[i]+old[i])|0}
+for(i=0;i<8;i++)for(j=3;j+1;j--){const b=(hash[i]>>(j*8))&255;res+=((b<16)?0:'')+b.toString(16)}return res}
+
+const sgal=(x,d=1)=>(x==null||isNaN(x))?'—':(x>0?'+':'')+fmt(x,d)+' gal';
+const isoD=ms=>{const d=new Date(ms);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const addDias=(f,n)=>new Date(Date.parse(f)+n*DIA).toISOString().slice(0,10);
+const dtP=x=>new Date(x.salida).getTime();
+function leerTabla(file){return new Promise((res,rej)=>{const ext=file.name.split('.').pop().toLowerCase(),rd=new FileReader();
+ if(ext==='csv'||ext==='txt'){rd.onload=()=>res(parseCSV(rd.result));rd.readAsText(file,'UTF-8')}
+ else{rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array',cellDates:true});res(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}))}catch(e){rej(e)}};rd.readAsArrayBuffer(file)}})}
+
+/* ---------- Google Sheets (Apps Script) ---------- */
+const CK='igc_cloud';let CL={};try{CL=JSON.parse(localStorage.getItem(CK)||'{}')}catch(e){}
+const COLS=['vehiculos','conductores','rutas','tanqueos','viajes','satrack','satLotes','facturas','preop'];
+let pulled=false,pushT=null;
+async function cloud(action,payload){const r=await fetch(CL.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,token:CL.token},payload))});const j=await r.json();if(!j.ok)throw new Error(j.error||'Error');return j}
+function setSync(t,c){const e=$('#sync');if(e){e.textContent=t;e.style.color=c||'#d6e4f5'}}
+function schedPush(){if(!CL.url||!pulled)return;clearTimeout(pushT);setSync('● Guardando en Google Sheets…','#f0b43c');pushT=setTimeout(push,1500)}
+async function push(){try{const d={config:[S.config]};COLS.forEach(k=>d[k]=S[k]);await cloud('saveAll',{data:d});setSync('● Sincronizado con Google Sheets','#4cc27e')}catch(e){setSync('● Error al guardar en Sheets: '+e.message,'#ff7b80')}}
+async function pull(){if(!CL.url)return setSync('● Sin conexión a Google Sheets (solo este navegador)','#f0b43c');
+ try{setSync('● Descargando de Google Sheets…','#f0b43c');const d=(await cloud('loadAll')).data||{},has=COLS.some(k=>(d[k]||[]).length);
+  if(has){const o={config:(d.config&&d.config[0])||{}};COLS.forEach(k=>o[k]=d[k]||[]);S=normState(o);try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}renderAll()}
+  pulled=true;setSync('● Sincronizado con Google Sheets','#4cc27e');if(!has&&COLS.some(k=>S[k].length))push()}
+ catch(e){setSync('● Sin conexión con Sheets: '+e.message,'#ff7b80')}}
+async function subirArchivoSat(lote,f){if(!CL.url||!f)return;
+ try{const b64=await new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result.split(',')[1]);x.readAsDataURL(f)});const j=await cloud('uploadFile',{name:f.name,mime:f.type||'application/octet-stream',b64});const l=S.satLotes.find(x=>x.id===lote);if(l){l.url=j.url;save();renderSatrack()}}
+ catch(e){toast('Informe importado, pero no se pudo guardar el archivo en Drive: '+e.message)}}
+async function pdfRows(file){
+ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+ const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise,rows=[];
+ for(let n=1;n<=pdf.numPages;n++){const tc=await(await pdf.getPage(n)).getTextContent(),L={};
+  tc.items.forEach(it=>{if(!it.str.trim())return;const y=Math.round(it.transform[5]/3);(L[y]=L[y]||[]).push({x:it.transform[4],s:it.str.trim()})});
+  Object.keys(L).map(Number).sort((a,b)=>b-a).forEach(y=>rows.push(L[y].sort((a,b)=>a.x-b.x).map(c=>c.s)))}
+ if(!rows.length)throw new Error('sin texto');return rows}
+
+/* ---------- Preoperacional ---------- */
+function guardarPre(ev){ev.preventDefault();
+ const r={id:uid(),salida:$('#pr-fecha').value,placa:normPlaca($('#pr-placa').value),conductor:$('#pr-cond').value.trim(),km:num($('#pr-km').value),obs:$('#pr-obs').value.trim()};
+ if(!r.salida||!r.placa||r.km==null){toast('Complete fecha, placa y km');return}
+ S.preop.push(r);$('#f-pre').reset();save();renderAll();toast('Medición preoperacional guardada')}
+function renderPre(){renderListas();
+ $('#tbl-pre').innerHTML=S.preop.length?'<tr><th>Salida</th><th>Vehículo</th><th>Conductor</th><th class="n">Km medición</th><th>Observación</th><th></th></tr>'+[...S.preop].sort((a,b)=>dtP(b)-dtP(a)).map(r=>`<tr><td>${fdt(r.salida)}</td><td><b>${esc(r.placa)}</b></td><td>${esc(r.conductor)}</td><td class="n">${fmt(r.km)}</td><td>${esc(r.obs)}</td><td class="n"><button class="btn sec sm" data-dp="${r.id}">Borrar</button></td></tr>`).join(''):'<tr><td class="muted">Aún no hay mediciones preoperacionales.</td></tr>';
+ $$('#tbl-pre [data-dp]').forEach(b=>b.onclick=()=>{if(confirm('¿Borrar esta medición?')){S.preop=S.preop.filter(x=>x.id!==b.dataset.dp);save();renderAll()}})}
+async function impPre(file){let rows;try{rows=await leerTabla(file)}catch(e){return toast('No se pudo leer el archivo')}
+ const hi=rows.findIndex(r=>r.map(norm).some(x=>/placa/.test(x)));if(hi<0)return toast('No se encontró la columna Placa');
+ const h=rows[hi].map(norm),f=re=>h.findIndex(x=>re.test(x)),c={f:f(/fecha|hora/),p:f(/placa/),c:f(/conductor/),k:f(/km|kilomet|medicion|odometro/)};let n=0;
+ rows.slice(hi+1).forEach(r=>{const d=parseFecha(r[c.f]),km=parseKm(r[c.k]),pl=normPlaca(r[c.p]);if(!d||km==null||!pl)return;S.preop.push({id:uid(),salida:d.iso,placa:pl,conductor:c.c>=0?String(r[c.c]).trim():'',km,obs:''});n++});
+ save();renderAll();toast(n+' mediciones importadas')}
+
+/* ---------- Facturas electrónicas ---------- */
+function parseFacturaXML(txt,arch){
+ const P=t=>new DOMParser().parseFromString(t,'application/xml'),ch=(n,t)=>{const e=[...n.children].find(x=>x.localName===t);return e?e.textContent.trim():''},ds=(n,t)=>n.getElementsByTagNameNS('*',t);
+ let d=P(txt);
+ if(d.documentElement.localName==='AttachedDocument'){let inner=null;for(const e of ds(d,'Description')){if(/<(\w+:)?Invoice[\s>]/.test(e.textContent)){inner=e.textContent;break}}if(!inner)return[];d=P(inner)}
+ const r=d.documentElement;if(r.localName!=='Invoice')return[];
+ const fac=ch(r,'ID'),fecha=ch(r,'IssueDate'),hora=ch(r,'IssueTime').slice(0,5),sup=ds(r,'AccountingSupplierParty')[0],prov=sup&&ds(sup,'RegistrationName')[0],nit=sup&&ds(sup,'CompanyID')[0];
+ const notas=[...r.children].filter(x=>x.localName==='Note').map(x=>x.textContent).join(' ');
+ return[...ds(r,'InvoiceLine')].map(l=>{const q=ds(l,'InvoicedQuantity')[0],cant=parseFloat(q&&q.textContent),u=(q&&q.getAttribute('unitCode'))||'';
+  const gal=u==='LTR'?cant/3.785411784:cant,val=parseFloat(ch(l,'LineExtensionAmount')),desc=((ds(l,'Description')[0]||{}).textContent||'').trim(),m=(desc+' '+notas).toUpperCase().match(/\b([A-Z]{3})[\s\-]?(\d{3})\b/);
+  return{factura:fac,fecha,hora,proveedor:prov?prov.textContent.trim():'',nit:nit?nit.textContent.trim():'',placa:m?m[1]+m[2]:'',desc:desc.slice(0,80),gal:isNaN(gal)?null:+gal.toFixed(3),valor:isNaN(val)?null:val,archivo:arch,u}})
+  .filter(x=>x.gal>0&&(/GLL|LTR/.test(x.u)||/ACPM|DIESEL|GASOLINA|COMBUSTIBLE/i.test(x.desc)))}
+function facDeTabla(rows,arch){
+ const hi=rows.findIndex(r=>{const h=r.map(norm);return h.some(x=>/fecha/.test(x))&&h.some(x=>/galon|cantidad/.test(x))});if(hi<0)return[];
+ const h=rows[hi].map(norm),f=re=>h.findIndex(x=>re.test(x)),c={n:f(/factura|numero|nro|consecutivo/),f:f(/fecha/),p:f(/placa|vehiculo/),g:f(/galon|cantidad/),v:f(/valor|total|subtotal/),pr:f(/proveedor|estacion|razon/)};
+ return rows.slice(hi+1).map(r=>{const d=parseFecha(r[c.f]),gal=parseKm(r[c.g]);if(!d||!(gal>0))return null;
+  return{factura:c.n>=0?String(r[c.n]).trim():'',fecha:d.iso.slice(0,10),hora:d.solo?'':d.iso.slice(11,16),proveedor:c.pr>=0?String(r[c.pr]).trim():'',nit:'',placa:c.p>=0?normPlaca(r[c.p]):'',desc:'',gal,valor:c.v>=0?parseKm(r[c.v]):null,archivo:arch}}).filter(Boolean)}
+async function cargarFacturas(files){let nu=0,dup=0;
+ const add=L=>L.forEach(f=>{const k=[f.factura,f.placa,f.fecha,f.gal,f.valor].join('|');if(S.facturas.some(x=>x.k===k)){dup++;return}f.k=k;f.id=uid();S.facturas.push(f);nu++});
+ for(const file of files){const ext=file.name.split('.').pop().toLowerCase();
+  try{if(ext==='xml')add(parseFacturaXML(await file.text(),file.name));
+   else if(ext==='zip'){const z=await JSZip.loadAsync(file);for(const n of Object.keys(z.files))if(/\.xml$/i.test(n))add(parseFacturaXML(await z.files[n].async('string'),n))}
+   else add(facDeTabla(await leerTabla(file),file.name))}
+  catch(e){toast('No se pudo leer '+file.name)}}
+ save();renderAll();toast(nu+' líneas de factura cargadas'+(dup?' · '+dup+' repetidas omitidas':''))}
+function conciliarFac(){
+ const tp=S.config.tolFacPct,td=S.config.tolFacDias,tv=S.config.tolFacValor,usados=new Set(),out=[],dd=(a,b)=>Math.abs(Date.parse(a)-Date.parse(b))/DIA;
+ [...S.facturas].sort((a,b)=>a.fecha<b.fecha?-1:1).forEach(f=>{
+  const t=S.tanqueos.filter(t=>!usados.has(t.id)&&dd(t.fecha,f.fecha)<=td&&(f.placa?t.placa===f.placa:Math.abs(t.gal-f.gal)/f.gal*100<=Math.max(tp*5,10))).sort((a,b)=>Math.abs(a.gal-f.gal)-Math.abs(b.gal-f.gal))[0];
+  if(!t){out.push({f,t:null,n:'crit',e:'FACTURA SIN TANQUEO',obs:''});return}
+  usados.add(t.id);
+  const dg=t.gal-f.gal,pg=f.gal>0?dg/f.gal*100:null,vt=isNum(t.precio)?t.gal*t.precio:null,dv=(vt!=null&&f.valor!=null)?vt-f.valor:null,obs=[];let n='ok',e='CONCILIADO';
+  if(Math.abs(pg)>tp){n='warn';e='DIFERENCIA DE GALONES'}
+  if(dv!=null&&f.valor>0&&Math.abs(dv)/f.valor*100>tv){obs.push('Valor del tanqueo difiere de la factura en '+money(dv));if(n==='ok'){n='warn';e='DIFERENCIA DE VALOR'}}
+  if(!f.placa)obs.push('Placa no identificada en la factura: cruce por fecha y galones');
+  out.push({f,t,dg,pg,dv,n,e,obs:obs.join(' · ')})});
+ const fs=S.facturas.map(f=>f.fecha).sort();
+ if(fs.length)S.tanqueos.filter(t=>!usados.has(t.id)&&t.fecha>=addDias(fs[0],-td)&&t.fecha<=addDias(fs[fs.length-1],td)).forEach(t=>out.push({f:null,t,n:'crit',e:'TANQUEO SIN FACTURA',obs:''}));
+ return out}
+function renderFacturas(){
+ const R=conciliarFac(),fl=$('#fa-est').value,V=R.filter(r=>!fl||r.n===fl),c=n=>R.filter(r=>r.n===n).length,P=R.filter(r=>r.f&&r.t);
+ const kp=(t,v,s)=>`<div class="kpi"><span>${t}</span><b>${v}</b>${s?`<span>${s}</span>`:''}</div>`;
+ $('#fa-kpis').innerHTML=kp('Líneas de factura',S.facturas.length,fmt(S.facturas.reduce((s,f)=>s+f.gal,0),1)+' gal facturados')+kp('Conciliadas',R.filter(r=>r.e==='CONCILIADO').length)+kp('Con diferencia',R.filter(r=>r.n==='warn').length,'galones o valor')+kp('Facturas sin tanqueo',R.filter(r=>r.e==='FACTURA SIN TANQUEO').length)+kp('Tanqueos sin factura',R.filter(r=>r.e==='TANQUEO SIN FACTURA').length)+kp('Dif. galones (tanqueo − factura)',sgal(P.reduce((s,r)=>s+r.dg,0)),'en las líneas cruzadas')+kp('Dif. valor (tanqueo − factura)',money(P.reduce((s,r)=>s+(r.dv||0),0)));
+ $('#tbl-fac').innerHTML=V.length?'<tr><th>Estado</th><th>Factura</th><th>Fecha</th><th>Placa</th><th class="n">Gal. factura</th><th class="n">Valor factura</th><th>Tanqueo</th><th class="n">Gal. tanqueo</th><th class="n">Dif. gal</th><th class="n">Dif. %</th><th class="n">Dif. valor</th><th>Observaciones</th></tr>'+V.map(r=>{const f=r.f,t=r.t;return`<tr><td>${chip(r.n,r.e)}</td><td>${f?esc(f.factura)+'<div class="small muted">'+esc(f.proveedor)+'</div>':'—'}</td><td>${f?fd(f.fecha):'—'}</td><td><b>${esc(f?f.placa||t&&t.placa||'':t.placa)}</b></td><td class="n">${f?fmt(f.gal,2):'—'}</td><td class="n">${f?money(f.valor):'—'}</td><td>${t?fd(t.fecha)+' '+esc(t.hora||''):'—'}</td><td class="n">${t?fmt(t.gal,2):'—'}</td><td class="n">${r.dg==null?'—':sgal(r.dg,2)}</td><td class="n">${r.pg==null?'—':sg(r.pg)}</td><td class="n">${r.dv==null?'—':money(r.dv)}</td><td class="small">${esc(r.obs||'')}</td></tr>`}).join(''):'<tr><td class="muted">Suba las facturas del proveedor para iniciar la conciliación.</td></tr>'}
+
+/* ---------- Gerencial por dimensión ---------- */
+const REFS=[['odo','Odómetro'],['sat','Satrack'],['ruta','Galones estándar por ruta'],['ral','Km base + ralentí'],['pre','Preoperacional']];
+function refsP(p,modo){const std=p.veh.std,kb=kmBase(p,modo),ral=(p.ralentiH!=null&&p.veh.ralenti!=null)?p.ralentiH*p.veh.ralenti:null;
+ return{odo:kmBase(p,'odo')?p.kmOdo*std:null,sat:p.kmSat>0?p.kmSat*std:null,ruta:p.galAprox,ral:(kb&&ral!=null)?kb*std+ral:null,pre:p.kmPre>0?p.kmPre*std:null}}
+function pesos(p,dim){
+ if(dim==='vehiculo')return[[p.placa,1]];if(dim==='mes')return[[p.mes,1]];
+ if(dim==='dia'){const a=new Date(p.A.fecha+'T00:00').getTime(),b=new Date(p.B.fecha+'T00:00').getTime(),n=Math.max(1,Math.round((b-a)/DIA)),o=[];for(let i=1;i<=n;i++)o.push([isoD(a+(b>a?i:0)*DIA),1/n]);return o}
+ return repartos(p).map(r=>[dim==='conductor'?r.cond:r.ruta,r.share])}
+function analisisDim(per,dim,modo){const G={};
+ per.forEach(p=>{const R=refsP(p,modo),km=kmBase(p,modo);
+  pesos(p,dim).forEach(([k,w])=>{const g=G[k]=G[k]||{k,gal:0,costo:0,galP:0,km:0,kmP:0,nV:0,ref:{}};
+   g.gal+=p.gal*w;g.nV+=p.nViajes*w;if(km)g.km+=km*w;if(p.costo!=null){g.costo+=p.costo*w;g.galP+=p.gal*w;if(km)g.kmP+=km*w}
+   REFS.forEach(([id])=>{if(R[id]!=null){const r=g.ref[id]=g.ref[id]||{real:0,esp:0};r.real+=p.gal*w;r.esp+=R[id]*w}})})});
+ const L=Object.values(G);return(dim==='dia'||dim==='mes')?L.sort((a,b)=>a.k<b.k?-1:1):L.sort((a,b)=>b.gal-a.gal)}
+const sobre$=g=>(g.ref.odo&&g.galP>0)?(g.ref.odo.real-g.ref.odo.esp)*g.costo/g.galP:null;
+const dimLab=(dim,k)=>dim==='mes'?mesTxt(k):dim==='dia'?fd(k):k;
+let ch3=null,ch4=null;
+function dibujarDim(per,modo){
+ const dim=$('#g-dim').value,G=analisisDim(per,dim,modo),Gv=dim==='dia'?G.slice(-45):G.slice(0,40);
+ const dc=r=>r?`${sgal(r.real-r.esp)} <span class="muted small">(${sg(r.esp>0?(r.real-r.esp)/r.esp*100:null,0)})</span>`:'—';
+ $('#g-dimtbl').innerHTML=G.length?`<table class="tbl"><tr><th>${{dia:'Día',mes:'Mes',conductor:'Conductor',ruta:'Ruta',vehiculo:'Vehículo'}[dim]}</th><th class="n">Gal. consumidos</th><th class="n">Gasto</th><th class="n">Costo/km</th><th class="n">Costo/viaje</th>${REFS.map(r=>'<th class="n">Dif. vs '+r[1]+'</th>').join('')}<th class="n">Sobreconsumo ($, odómetro)</th></tr>`+G.map(g=>`<tr><td><b>${esc(dimLab(dim,g.k))}</b></td><td class="n">${fmt(g.gal,1)}</td><td class="n">${g.galP>0?money(g.costo):'—'}</td><td class="n">${g.kmP>0?money(g.costo/g.kmP):'—'}</td><td class="n">${g.nV>0&&g.galP>0?money(g.costo/g.nV):'—'}</td>${REFS.map(r=>'<td class="n">'+dc(g.ref[r[0]])+'</td>').join('')}<td class="n">${money(sobre$(g))}</td></tr>`).join('')+'</table>':'<p class="muted">Sin períodos cerrados con los filtros actuales.</p>';
+ $('#g-dimnota').textContent='Diferencia = galones reales − galones esperados con cada referencia (esperado = km de la referencia × estándar del vehículo; rutas = galonaje estándar por ruta; ralentí = km base + horas de ralentí × gal/h; preoperacional = km de la medición de salida). Cada referencia solo suma los períodos donde está disponible. Por día se reparte cada período en partes iguales entre sus días; por conductor y ruta, en proporción al km estándar de los viajes. Son estimaciones para revisar, no conclusiones.';
+ if(ch3){ch3.destroy();ch3=null}if(ch4){ch4.destroy();ch4=null}
+ if(typeof Chart==='undefined'||!Gv.length)return;
+ const pal=PAL(),grid=css('--grid'),axis=css('--axis'),lab=Gv.map(g=>dim==='dia'?fd(g.k).slice(0,5):dimLab(dim,g.k)),base={responsive:true,maintainAspectRatio:false};
+ ch3=new Chart($('#g-c3'),{type:'bar',data:{labels:lab,datasets:REFS.map(([id,n],i)=>({label:n,data:Gv.map(g=>g.ref[id]?+(g.ref[id].real-g.ref[id].esp).toFixed(1):null),backgroundColor:pal[i],borderRadius:3}))},options:Object.assign({},base,{plugins:{tooltip:{callbacks:{label:c=>c.dataset.label+': '+sgal(c.parsed.y)}}},scales:{x:{grid:{display:false},border:{color:axis}},y:{grid:{color:grid},border:{display:false},ticks:{callback:v=>v+' gal'}}}})});
+ ch4=new Chart($('#g-c4'),{data:{labels:lab,datasets:[
+  {type:'bar',label:'Gasto en combustible',data:Gv.map(g=>g.galP>0?Math.round(g.costo):null),backgroundColor:pal[0],borderRadius:3,yAxisID:'y'},
+  {type:'bar',label:'Sobreconsumo vs odómetro ($)',data:Gv.map(g=>{const s=sobre$(g);return s==null?null:Math.round(s)}),backgroundColor:pal[1],borderRadius:3,yAxisID:'y'},
+  {type:'line',label:'Costo por km',data:Gv.map(g=>g.kmP>0?Math.round(g.costo/g.kmP):null),borderColor:pal[3],backgroundColor:pal[3],yAxisID:'y2',tension:.25}]},
+  options:Object.assign({},base,{plugins:{tooltip:{callbacks:{label:c=>c.dataset.label+': '+money(c.parsed.y)}}},scales:{x:{grid:{display:false},border:{color:axis}},y:{grid:{color:grid},border:{display:false},ticks:{callback:v=>money(v)}},y2:{position:'right',grid:{display:false},border:{display:false},ticks:{callback:v=>money(v)}}}})})}
+
+/* ---------- Exportación a Excel ---------- */
+const TT=(h,r)=>[h,...r];
+function libro(sec){
+ const modo=S.config.baseKm,per=todosPeriodos().sort((a,b)=>dtT(a.B)-dtT(b.B)),W={},bn=BASES[modo],A=analisisTodo();
+ if(sec==='resumen'){
+  W['Períodos']=TT(['Placa','Inicio','Fin','Km odómetro','Km Satrack','Fuente Satrack','Dif. km','Dif. %','Km preoperacional','Km viajes','N.º viajes','Galones','Precio prom. galón','Total combustible','Gal. aprox. rutas','Ralentí h','Gal/km odómetro','Gal/km Satrack','Estándar gal/km','Dif. gal vs estándar (odómetro)','Dif. % vs estándar (odómetro)','Estado','Calidad del dato','Rutas repetidas (var. gal %)'],per.map(p=>{const e=p.kmOdo>0?p.kmOdo*p.veh.std:null;return[p.placa,p.A.fecha+' '+(p.A.hora||''),p.B.fecha+' '+(p.B.hora||''),p.kmOdo,p.kmSat,p.fuenteSat||'',p.difAbs,p.difPct,p.kmPre,p.kmViajes,p.nViajes,p.gal,p.precioProm,p.costo,p.galAprox,p.ralentiH,p.consOdo,p.consSat,p.veh.std,e==null?null:p.gal-e,e?(p.gal-e)/e*100:null,p.estado.t,p.calidad.t,p.rep&&p.rep.pct!=null?p.rep.pct:null]}));
+  W['Escenarios']=TT(['Placa','Período','Escenario','Km base','Gal. esperados','Gal. reales','Dif. gal','Dif. %'],per.flatMap(p=>p.escenarios.map(s=>[p.placa,p.A.fecha+' → '+p.B.fecha,s.nombre,s.km,s.esp,s.real,s.real-s.esp,s.dev])));
+  const pls=[...new Set(per.map(p=>p.placa))].sort();
+  W['Por vehículo']=TT(['Vehículo','Períodos','Km base ('+bn+')','Gal. consumidos','Gal/km','Estándar','Desviación %','Sobreconsumo gal','Sobreconsumo $','Viajes','Gal/viaje','Costo/km'],pls.map(pl=>{const a=agg(per.filter(p=>p.placa===pl),modo);return[pl,a.n,a.km,a.gal,a.galkm,vehiculo(pl).std,a.desv,a.sobreGal,a.sobreCosto,a.nViajes,a.galViaje,a.costoKm]}));
+  [['conductor','cond'],['ruta','ruta']].forEach(([n,d])=>W['Por '+n]=TT([n,'Viajes','Km estándar','Gal. atribuidos','Gal. aprox. rutas','Dif. gal','Dif. %','Costo atribuido'],agruparPor(per,d,modo).map(g=>[g.k,g.n,g.km,g.gal,g.galAprox||null,g.galAprox>0?g.gal-g.galAprox:null,g.galAprox>0?(g.gal-g.galAprox)/g.galAprox*100:null,g.galP>0?g.costo:null])));
+ }
+ if(sec==='tanqueos')W['Tanqueos']=TT(['Fecha','Hora','Placa','Conductor','Odómetro','Galones','Precio/gal','Total','Full','Km Satrack (int.)','Ralentí h','Alertas','Observaciones'],[...S.tanqueos].sort((a,b)=>dtT(a)-dtT(b)).map(r=>{const fl=(A[r.placa]&&A[r.placa].flags[r.id])||[];return[r.fecha,r.hora,r.placa,r.conductor,r.odo,r.gal,r.precio,isNum(r.precio)?r.gal*r.precio:null,r.full?'Sí':'No',num(r.satKm),num(r.ralentiH),fl.map(x=>x.c).join('; '),r.obs]}));
+ if(sec==='viajes'){
+  const vs=[...S.viajes].sort((a,b)=>dtV(a)-dtV(b));
+  W['Viajes']=TT(['Salida','Placa','Conductor','Ruta','Remisión','N.º viajes','Km estándar','Odómetro ini','Odómetro fin','Km Satrack','Gal. aprox.'],vs.map(v=>[v.salida.replace('T',' '),v.placa,v.conductor,v.ruta,v.remision,nV(v),kmViaje(v),v.odoIni,v.odoFin,v.satKm,galViaje(v)]));
+  const g={};vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;const o=g[k]=g[k]||{n:0,km:0,gal:0,r:[]};o.n+=nV(v);o.km+=kmViaje(v);o.gal+=galViaje(v);o.r.push(v.ruta+' ×'+nV(v))});
+  W['Resumen por día']=TT(['Fecha','Placa','Viajes','Rutas','Km estándar','Gal. aprox.'],Object.keys(g).sort().map(k=>[k.split('|')[0],k.split('|')[1],g[k].n,g[k].r.join(' + '),g[k].km,g[k].gal]))}
+ if(sec==='preop')W['Preoperacional']=TT(['Salida','Placa','Conductor','Km medición','Observación'],[...S.preop].sort((a,b)=>dtP(a)-dtP(b)).map(r=>[r.salida.replace('T',' '),r.placa,r.conductor,r.km,r.obs]));
+ if(sec==='facturas')W['Facturas vs tanqueos']=TT(['Estado','Factura','Proveedor','NIT','Fecha factura','Placa','Gal. factura','Valor factura','Fecha tanqueo','Gal. tanqueo','Dif. gal','Dif. %','Dif. valor','Observaciones'],conciliarFac().map(r=>{const f=r.f||{},t=r.t||{};return[r.e,f.factura,f.proveedor,f.nit,f.fecha,f.placa||t.placa,f.gal,f.valor,t.fecha?t.fecha+' '+(t.hora||''):'',t.gal,r.dg,r.pg,r.dv,r.obs]}));
+ if(sec==='satrack'){W['Registros Satrack']=TT(['Placa','Desde','Hasta','Km','Ralentí h','Informe'],[...S.satrack].sort((a,b)=>a.t0-b.t0).map(s=>[s.placa,fT(s.t0),fT(s.t1),s.km,s.ralentiH,(S.satLotes.find(l=>l.id===s.lote)||{}).archivo||'']));W['Informes cargados']=TT(['Archivo','Cargado','Registros','Enlace Drive'],S.satLotes.map(l=>[l.archivo,l.fecha,S.satrack.filter(s=>s.lote===l.id).length,l.url||'']))}
+ if(sec==='gerencial'){
+  const a=agg(per,modo);W['Indicadores']=TT(['Indicador','Valor'],[['Base de km',bn],['Períodos',a.n],['Km',a.km],['Galones',a.gal],['Gal/km',a.galkm],['Km/gal',a.kmgal],['Desviación %',a.desv],['Sobreconsumo gal',a.sobreGal],['Sobreconsumo $',a.sobreCosto],['Costo/km',a.costoKm],['Viajes',a.nViajes],['Costo/viaje',a.costoViaje]]);
+  [['dia','Día'],['mes','Mes'],['conductor','Conductor'],['ruta','Ruta'],['vehiculo','Vehículo']].forEach(([d,n])=>W['Por '+n.toLowerCase()]=TT([n,'Gal. consumidos','Gasto','Km','Costo/km','Viajes',...REFS.flatMap(r=>['Dif. gal vs '+r[1],'Dif. % vs '+r[1]]),'Sobreconsumo $ (odómetro)'],analisisDim(per,d,modo).map(g=>[d==='mes'||d==='dia'?g.k:g.k,g.gal,g.galP>0?g.costo:null,g.km,g.kmP>0?g.costo/g.kmP:null,g.nV,...REFS.flatMap(r=>{const x=g.ref[r[0]];return x?[x.real-x.esp,x.esp>0?(x.real-x.esp)/x.esp*100:null]:[null,null]}),sobre$(g)])));
+  W['Alertas']=TT(['Nivel','Detalle'],alertas(per,modo).map(x=>[x.n,x.t]))}
+ if(sec==='config'){
+  W['Parámetros']=TT(['Parámetro','Valor'],Object.entries(S.config));
+  W['Vehículos']=TT(['Placa','Capacidad (gal)','Estándar gal/km','Ralentí gal/h'],S.vehiculos.map(v=>[v.placa,v.capacidad,v.std,v.ralenti]));
+  W['Rutas']=TT(['Ruta','Km estándar','Gal. todos los vehículos','Gal. por vehículo','Notas'],S.rutas.map(r=>[r.nombre,r.km,r.galFijo,JSON.stringify(r.galVeh||{}),r.nota]));
+  W['Conductores']=TT(['Nombre','Documento','Notas'],S.conductores.map(c=>[c.nombre,c.documento,c.nota]))}
+ return W}
+function exportXLSX(sec){
+ if(typeof XLSX==='undefined')return toast('Exportar a Excel requiere conexión a internet (librería XLSX)');
+ const secs=sec==='todo'?['resumen','tanqueos','viajes','preop','facturas','satrack','gerencial','config']:[sec],wb=XLSX.utils.book_new(),us=new Set();
+ secs.forEach(s=>Object.entries(libro(s)).forEach(([n,a])=>{let nm=n.slice(0,31);if(us.has(nm))nm=nm.slice(0,27)+'_'+us.size;us.add(nm);const ws=XLSX.utils.aoa_to_sheet(a);ws['!cols']=(a[0]||[]).map(()=>({wch:18}));XLSX.utils.book_append_sheet(wb,ws,nm)}));
+ XLSX.writeFile(wb,'IGC_'+({resumen:'conciliacion',tanqueos:'tanqueos',viajes:'viajes',preop:'preoperacional',facturas:'facturas',satrack:'satrack',gerencial:'gerencial',config:'configuracion',todo:'completo'}[sec])+'_'+isoD(Date.now())+'.xlsx')}
+
+function renderCloudCfg(){$('#cl-url').value=CL.url||'';$('#cl-tok').value=CL.token||'';$('#c-tfp').value=S.config.tolFacPct;$('#c-tfd').value=S.config.tolFacDias;$('#c-tfv').value=S.config.tolFacValor}
+function initExtra(){
+ const unlock=()=>{document.body.classList.remove('locked');pull()};
+ if(sessionStorage.getItem('igc_ok')==='1')unlock();
+ $('#f-login').onsubmit=e=>{e.preventDefault();const u=$('#lg-u').value.trim(),p=$('#lg-p').value;
+  if(u===U_OK&&sha256(u+':'+p)===H_OK){sessionStorage.setItem('igc_ok','1');$('#lg-err').textContent='';unlock()}else{$('#lg-err').textContent='Usuario o contraseña incorrectos';$('#lg-p').value=''}};
+ $('#logout').onclick=()=>{sessionStorage.removeItem('igc_ok');location.reload()};
+ const KEY={resumen:1,tanqueos:1,viajes:1,preop:1,facturas:1,satrack:1,gerencial:1,config:1};
+ $$('section').forEach(s=>{const k=s.id.replace('tab-','');if(KEY[k])s.insertAdjacentHTML('afterbegin',`<div class="xl"><button class="btn sec sm" data-xl="${k}">⬇ Exportar a Excel</button></div>`)});
+ $$('[data-xl]').forEach(b=>b.onclick=()=>exportXLSX(b.dataset.xl));
+ $('#xl-todo').onclick=()=>exportXLSX('todo');
+ $('#f-pre').onsubmit=guardarPre;$('#pr-imp').onclick=()=>$('#pr-file').click();$('#pr-file').onchange=e=>{const f=e.target.files[0];if(f)impPre(f);e.target.value=''};
+ $('#fa-btn').onclick=()=>$('#fa-file').click();$('#fa-file').onchange=e=>{if(e.target.files.length)cargarFacturas([...e.target.files]);e.target.value=''};
+ $('#fa-est').onchange=renderFacturas;
+ $('#fa-del').onclick=()=>{if(S.facturas.length&&confirm('¿Eliminar todas las facturas cargadas? Los tanqueos no se tocan.')){S.facturas=[];save();renderAll()}};
+ $('#g-dim').onchange=renderGerencial;
+ [['#c-tfp','tolFacPct'],['#c-tfd','tolFacDias'],['#c-tfv','tolFacValor']].forEach(([s,k])=>$(s).onchange=()=>{const v=num($(s).value);if(v==null||v<0)return renderCloudCfg();S.config[k]=v;save();renderAll()});
+ $('#cl-ok').onclick=()=>{CL={url:$('#cl-url').value.trim(),token:$('#cl-tok').value.trim()};localStorage.setItem(CK,JSON.stringify(CL));pulled=false;pull()};
+ $('#cl-up').onclick=async()=>{if(!CL.url)return toast('Configure primero la URL');if(!confirm('Esto reemplaza el contenido de Google Sheets con los datos de este navegador. ¿Continuar?'))return;pulled=true;await push();toast('Datos subidos a Google Sheets')};
+ $('#cl-down').onclick=()=>{if(!CL.url)return toast('Configure primero la URL');if(confirm('Esto reemplaza los datos de este navegador con los de Google Sheets. ¿Continuar?')){pulled=false;pull()}};
+ $('#sat-api').onclick=async()=>{if(!CL.url)return toast('Configure primero la conexión con Apps Script');
+  const d=prompt('Desde (AAAA-MM-DD):',isoD(Date.now()-7*DIA));if(!d)return;const h=prompt('Hasta (AAAA-MM-DD):',isoD(Date.now()));if(!h)return;
+  try{toast('Consultando Satrack…');const j=await cloud('satrack',{desde:d,hasta:h});if(!j.rows||!j.rows.length)return toast('Satrack no devolvió registros');
+   satPrev={nombre:'API Satrack '+d+' a '+h,rows:[['Placa','Desde','Hasta','Km recorridos','Ralentí (h)'],...j.rows.map(x=>[x.placa,x.desde,x.hasta,x.km,x.ralentiH==null?'':x.ralentiH])]};satMapear()}catch(e){toast('Satrack: '+e.message)}};
+ renderCloudCfg()}
+
+/* ===================== Arranque ===================== */
+function goTab(t){$$('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));$$('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+t));if(t==='gerencial')renderGerencial()}
+function renderAll(){
+  renderResumen();renderTanqueos();renderViajes();renderSatrack();renderConfig();renderPre();renderFacturas();renderCloudCfg();
+  const g=$('#g-mes');if(g&&!g.options.length)fillMeses();
+  if($('#tab-gerencial').classList.contains('on'))renderGerencial();
+}
+$$('#nav button').forEach(b=>b.onclick=()=>goTab(b.dataset.tab));
+$('#f-tanqueo').onsubmit=guardarTanqueo;
+$('#t-cancelar').onclick=limpiarFormTanqueo;
+['#t-placa','#t-odo','#t-fecha','#t-hora'].forEach(s=>$(s).addEventListener('input',liveCheck));
+['#t-gal','#t-precio'].forEach(s=>$(s).addEventListener('input',totalLive));
+fotoInput('#b-odo-up','#i-odo-up','odo','#p-odo');fotoInput('#b-odo-cam','#i-odo-cam','odo','#p-odo');
+fotoInput('#b-comp-up','#i-comp-up','comp','#p-comp');fotoInput('#b-comp-cam','#i-comp-cam','comp','#p-comp');
+$('#f-viaje').onsubmit=guardarViaje;
+$('#v-otra').onclick=()=>{if($('#f-viaje').reportValidity())guardarViaje({preventDefault(){}},true)};
+$('#v-ruta').onchange=()=>rutaCambio(false);
+['#v-kmruta','#v-placa','#v-nv'].forEach(s=>$(s).addEventListener('input',liveViaje));
+$('#v-cancelar').onclick=()=>{editingV=null;$('#f-viaje').reset();$('#v-cancelar').hidden=true;rutaCambio(true)};
+$('#dlg-x').onclick=()=>$('#dlg').close();
+$('#sat-btn').onclick=()=>$('#sat-file').click();
+$('#sat-file').onchange=e=>{const f=e.target.files[0];if(f)satArchivo(f);e.target.value=''};
+$('#sat-placa').onchange=renderSatrack;
+$('#m-mes').onchange=renderMensual;$('#m-vista').onchange=renderMensual;
+$('#g-mes').onchange=renderGerencial;$('#g-placa').onchange=renderGerencial;
+$$('.sel-base').forEach(s=>s.onchange=()=>{S.config.baseKm=s.value;save();renderAll()});
+bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();
+</script>
+</body>
+</html>
