@@ -95,6 +95,9 @@ body.locked #login{display:flex}
 #dlg-fac h3{margin:16px 0 6px}
 .hist{white-space:pre-wrap;background:var(--nabg);border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 8px}
 details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand);font-weight:600}
+#sync{cursor:pointer}#sync:hover{text-decoration:underline}
+#dx-out code{background:var(--nabg);padding:1px 5px;border-radius:4px}
+#dx-out td:nth-child(4){min-width:240px}#dx-out td:nth-child(1){width:28px}
 </style>
 </head>
 <body class="locked">
@@ -452,7 +455,8 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <div><label>Factura vs tanqueo: tolerancia de valor (%)</label><input type="number" id="c-tfv" min="0" step="0.5"></div>
       <div><label>Retención en la fuente por defecto (%) — compra de combustible</label><input type="number" id="c-rfp" min="0" step="0.05"></div>
     </div>
-    <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button><button class="btn sec" id="pdf-todo" type="button">⬇ Exportar TODO a PDF</button></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="cl-dx" type="button">🩺 Diagnosticar conexión</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button><button class="btn sec" id="pdf-todo" type="button">⬇ Exportar TODO a PDF</button></div>
+    <div id="dx-out" style="display:none;margin-top:14px"></div>
   </div>
   <div class="card">
     <h2>Datos</h2>
@@ -1364,15 +1368,135 @@ function leerTabla(file){return new Promise((res,rej)=>{const ext=file.name.spli
 const CK='igc_cloud';let CL={};try{CL=JSON.parse(localStorage.getItem(CK)||'{}')}catch(e){}
 const COLS=['vehiculos','conductores','rutas','tanqueos','viajes','satrack','satLotes','facturas','preop'];
 let pulled=false,pushT=null;
-async function cloud(action,payload){const r=await fetch(CL.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,token:CL.token},payload))});const j=await r.json();if(!j.ok)throw new Error(j.error||'Error');return j}
+class CloudErr extends Error{constructor(m,code,extra){super(m);this.code=code;this.extra=extra||{}}}
+async function cloud(action,payload,cfg,ms){cfg=cfg||CL;const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),ms||60000);let r,tx;
+ try{r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,token:cfg.token},payload)),signal:ctl.signal});tx=await r.text()}
+ catch(e){clearTimeout(tm);if(e&&e.name==='AbortError')throw new CloudErr('Tiempo de espera agotado: Google no respondió','TIMEOUT');throw new CloudErr(e&&e.message||String(e),'NET')}
+ clearTimeout(tm);let j;try{j=JSON.parse(tx)}catch(e){const t=(tx.match(/<title>([^<]*)<\/title>/i)||[])[1]||'';throw new CloudErr('Google devolvió una página HTML en lugar de datos'+(t?' («'+t.trim()+'»)':'')+(r.status&&r.status!==200?' [HTTP '+r.status+']':''),'HTML',{html:tx.slice(0,400),title:t})}
+ if(!j.ok)throw new CloudErr(j.error||'Error','APP',{resp:j});return j}
 function setSync(t,c){const e=$('#sync');if(e){e.textContent=t;e.style.color=c||'#d6e4f5'}}
 function schedPush(){if(!CL.url||!pulled)return;clearTimeout(pushT);setSync('● Guardando en Google Sheets…','#f0b43c');pushT=setTimeout(push,1500)}
-async function push(){try{const d={config:[S.config]};COLS.forEach(k=>d[k]=S[k]);await cloud('saveAll',{data:d});setSync('● Sincronizado con Google Sheets','#4cc27e')}catch(e){setSync('● Error al guardar en Sheets: '+e.message,'#ff7b80')}}
+async function push(){try{const d={config:[S.config]};COLS.forEach(k=>d[k]=S[k]);await cloud('saveAll',{data:d});setSync('● Sincronizado con Google Sheets','#4cc27e')}catch(e){setSync('● Error al guardar en Sheets: '+e.message+' — clic aquí para diagnosticar','#ff7b80')}}
 async function pull(){if(!CL.url)return setSync('● Sin conexión a Google Sheets (solo este navegador)','#f0b43c');
  try{setSync('● Descargando de Google Sheets…','#f0b43c');const d=(await cloud('loadAll')).data||{},has=COLS.some(k=>(d[k]||[]).length);
   if(has){const o={config:(d.config&&d.config[0])||{}};COLS.forEach(k=>o[k]=d[k]||[]);S=normState(o);try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}renderAll()}
   pulled=true;setSync('● Sincronizado con Google Sheets','#4cc27e');if(!has&&COLS.some(k=>S[k].length))push()}
- catch(e){setSync('● Sin conexión con Sheets: '+e.message,'#ff7b80')}}
+ catch(e){setSync('● Sin conexión con Sheets: '+e.message+' — clic aquí para diagnosticar','#ff7b80')}}
+/* ---------- Diagnóstico de conexión con Apps Script y Google Sheets ---------- */
+const DX_RE=/^https:\/\/script\.google\.com\/(?:macros\/|a\/macros\/[^\/]+\/|a\/[^\/]+\/macros\/)s\/[A-Za-z0-9_-]{20,}\/exec$/;
+const dxEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dxMask=u=>String(u||'').replace(/\/s\/([A-Za-z0-9_-]{6})[A-Za-z0-9_-]*([A-Za-z0-9_-]{4})\//,'/s/$1…$2/');
+function dxUrl(u){
+ if(!u)return['crit','No hay URL escrita','Pegue en el campo «URL de la aplicación web» la URL de la implementación (termina en /exec).'];
+ if(/\s/.test(u))return['crit','La URL contiene espacios o saltos de línea','Cópiela de nuevo, sin espacios al inicio, al final ni en medio.'];
+ if(/docs\.google\.com\/spreadsheets/.test(u))return['crit','Pegó la URL de la hoja de cálculo','Aquí va la URL de Apps Script (script.google.com/macros/s/…/exec), no la de la hoja.'];
+ if(/^AKfycb[\w-]+$/.test(u))return['crit','Pegó solo el ID de la implementación','Use la URL completa: https://script.google.com/macros/s/ID/exec'];
+ if(!/^https:\/\//i.test(u))return['crit','La URL no empieza por https://','Copie la URL completa desde Implementar → Administrar implementaciones.'];
+ if(/script\.google\.com\/(home|d\/)|\/edit(\?|#|$)/.test(u))return['crit','Es la URL del editor de Apps Script, no la de la aplicación web','En el editor: Implementar → Administrar implementaciones → copie la «URL de la aplicación web».'];
+ if(/\/dev(\?|#|$)/.test(u))return['crit','Es la URL de prueba (/dev)','La URL /dev solo funciona para el propietario con sesión iniciada. Use la que termina en /exec.'];
+ if(/\/exec\?./.test(u))return['warn','La URL tiene parámetros después de /exec','Déjela terminada exactamente en /exec.'];
+ if(/\/u\/\d+\//.test(u))return['warn','La URL contiene /u/0/ (copiada con varias cuentas de Google abiertas)','Elimine ese tramo o copie la URL de nuevo desde Administrar implementaciones.'];
+ if(!DX_RE.test(u))return['warn','El formato de la URL no es el habitual','Debe verse así: https://script.google.com/macros/s/AKfycb…/exec'];
+ return['ok','Formato de URL correcto',''];
+}
+async function dxReach(u,ms){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms||12000),t0=performance.now();
+ try{await fetch(u,{mode:'no-cors',cache:'no-store',signal:c.signal});return{ok:true,ms:Math.round(performance.now()-t0)}}
+ catch(e){return{ok:false,err:e&&e.name==='AbortError'?'sin respuesta en '+((ms||12000)/1000)+' s':(e&&e.message||String(e))}}
+ finally{clearTimeout(t)}}
+let dxBusy=false,dxTxt='';
+async function diagnosticar(){
+ if(dxBusy)return;dxBusy=true;
+ const out=$('#dx-out'),url=($('#cl-url').value||'').trim(),token=($('#cl-tok').value||'').trim(),cfg={url,token},R=[],viol=[];
+ let corriendo='';
+ const onV=ev=>viol.push((ev.violatedDirective||'')+' · '+(ev.blockedURI||''));
+ document.addEventListener('securitypolicyviolation',onV);
+ const ico={ok:'✔',warn:'⚠',crit:'✖'};
+ const pintar=()=>{out.innerHTML='<h3>Diagnóstico de conexión</h3><div class="wrap"><table class="tbl"><thead><tr><th>#</th><th>Prueba</th><th>Resultado</th><th>Qué hacer</th></tr></thead><tbody>'
+  +R.map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+dxEsc(r.t)+'</td><td><span class="chip '+r.e+'">'+ico[r.e]+'</span> '+dxEsc(r.d)+'</td><td>'+dxEsc(r.a)+'</td></tr>').join('')
+  +'</tbody></table></div>'+(corriendo?'<p class="muted small">⏳ '+dxEsc(corriendo)+'…</p>':'')};
+ const add=(e,t,d,a)=>{R.push({e,t,d,a:a||''});corriendo='';pintar()};
+ const run=t=>{corriendo=t;pintar()};
+ out.style.display='block';pintar();
+ try{
+  /* 1. Entorno */
+  run('Revisando el entorno de la página');
+  {const loc=location.protocol+'//'+(location.host||'(archivo local)');let e='ok',d='Página abierta desde '+loc,a='';
+   if(/claude|anthropic/i.test(location.hostname)){e='crit';d='La página está dentro de Claude ('+location.hostname+')';a='Las páginas dentro de Claude bloquean las conexiones a otros sitios, por eso siempre sale «Failed to fetch». Descargue el index.html y ábralo con doble clic en su computador, o súbalo a su propio hosting.'}
+   else if(/^(blob|data|about):$/.test(location.protocol)){e='warn';d+=' (vista temporal)';a='Guarde el archivo como index.html y ábrelo directamente desde el computador.'}
+   else if(window.self!==window.top){e='warn';d+=' (incrustada en un iframe)';a='Un iframe puede tener restricciones de red. Abra el archivo directamente en una pestaña del navegador.'}
+   else if(location.protocol==='file:'){d+=' — es válido: Apps Script normalmente acepta peticiones desde archivos locales'}
+   add(e,'Entorno de la página',d,a)}
+  /* 2. Internet */
+  if(navigator.onLine===false)add('crit','Internet del equipo','El navegador reporta que no hay conexión a internet','Revise el wifi/cable y vuelva a intentar.');
+  else add('ok','Internet del equipo','El navegador reporta conexión activa','');
+  /* 3. URL */
+  const [ue,ud,ua]=dxUrl(url);add(ue,'Formato de la URL',ud,ua);
+  add(token?'ok':'warn','Token de acceso',token?'Escrito ('+token.length+' caracteres)':'Está vacío','Si su Code.gs exige APP_TOKEN, escriba aquí exactamente el mismo valor (distingue mayúsculas y minúsculas).');
+  if(!/^https:\/\//i.test(url)){throw 0}
+  /* 4. Alcance a Google */
+  run('Probando acceso a Google');
+  const g1=await dxReach('https://www.google.com/generate_204',10000);
+  if(!g1.ok)add('crit','Acceso a Google','No se pudo llegar a google.com ('+g1.err+')','Hay un problema de red general: sin internet, proxy, firewall de la empresa o VPN. Pruebe con otra red (por ejemplo los datos del celular).');
+  else{
+   run('Probando acceso a script.google.com');
+   const g2=await dxReach('https://script.google.com/',10000);
+   if(!g2.ok)add('crit','Acceso a script.google.com','Google responde pero script.google.com no ('+g2.err+')','Algo bloquea ese dominio: antivirus, firewall, DNS, extensión de bloqueo de anuncios/privacidad. Desactive las extensiones en esta página o pruebe en una ventana de incógnito.');
+   else add('ok','Acceso a script.google.com','Alcanzable en '+g2.ms+' ms','');}
+  /* 5. Servidor de la implementación */
+  run('Comprobando que la implementación responde');
+  const g3=await dxReach(url,15000);
+  if(!g3.ok)add('crit','La implementación responde','No hay respuesta de la URL ('+g3.err+')','Revise que la URL esté completa y que la implementación no haya sido eliminada o archivada en Administrar implementaciones.');
+  else add('ok','La implementación responde','El servidor contestó en '+g3.ms+' ms (aún no se sabe si el navegador puede leer la respuesta)','');
+  /* 6. Prueba real (POST con lectura de respuesta) */
+  run('Enviando una consulta de prueba al script');
+  let tOk=false;const t0=performance.now();
+  try{const j=await cloud('ping',{},cfg,25000);tOk=true;add('ok','Consulta de prueba (POST)','El script respondió correctamente en '+Math.round(performance.now()-t0)+' ms','')}
+  catch(e){const m=e.message||String(e),ms=Math.round(performance.now()-t0);
+   if(e.code==='APP'){tOk=true;
+    if(/token|contrase|autoriz|no autorizado|unauthor|clave|denegad/i.test(m))add('crit','Consulta de prueba (POST)','El script respondió, pero rechazó el token: «'+m+'»','Compare el «Token de acceso» con APP_TOKEN en el editor de Apps Script → Configuración del proyecto → Propiedades del script. Debe ser idéntico, sin espacios.');
+    else add('ok','Consulta de prueba (POST)','El script respondió en '+ms+' ms (no reconoce la acción «ping», es normal): «'+m+'»','')}
+   else if(e.code==='HTML'){
+    const h=(e.extra.html||'')+' '+(e.extra.title||'');
+    if(/sign.?in|iniciar sesi|accounts\.google/i.test(h))add('crit','Consulta de prueba (POST)','Google pide iniciar sesión: la implementación no es pública','En Administrar implementaciones → ✏ Editar → «Quién tiene acceso»: Cualquier persona. Luego «Nueva versión» → Implementar.');
+    else if(/doPost|funci[oó]n de secuencia|script function|not found|no se encontr/i.test(h))add('crit','Consulta de prueba (POST)','El script no tiene doPost o la implementación quedó con una versión antigua','Verifique que Code.gs tenga function doPost(e) y cree una «Nueva versión» de la implementación.');
+    else add('crit','Consulta de prueba (POST)',m,'El script lanzó un error o no devuelve JSON. En el editor de Apps Script abra «Ejecuciones» para ver el error exacto.')}
+   else if(e.code==='TIMEOUT')add('warn','Consulta de prueba (POST)',m,'Apps Script puede tardar en el primer arranque; vuelva a ejecutar el diagnóstico.');
+   else{ /* NET: «Failed to fetch» */
+    if(viol.length)add('crit','Consulta de prueba (POST)','El navegador bloqueó la conexión por política de seguridad (CSP): '+viol[0],'La página está en un entorno restringido. Ábrala como archivo local (doble clic en index.html) o desde su propio hosting.');
+    else if(g3.ok)add('crit','Consulta de prueba (POST)','El servidor sí responde, pero el navegador no puede leer la respuesta ('+m+')','Causas en orden de probabilidad: (1) «Quién tiene acceso» no es «Cualquier persona»; (2) Code.gs falló o la implementación no tiene la última «Nueva versión»; (3) cuenta de Google Workspace que impide el acceso público; (4) extensión o antivirus que bloquea. Abra la URL en una ventana de incógnito: si pide iniciar sesión, es la causa (1).');
+    else add('crit','Consulta de prueba (POST)',m,'No se llegó al servidor; revise las pruebas anteriores.')}}
+  /* 7. Lectura de la hoja */
+  if(tOk){
+   run('Leyendo datos de Google Sheets');
+   try{const t1=performance.now(),j=await cloud('loadAll',{},cfg,45000),d=j.data||{},n=COLS.map(k=>k+': '+((d[k]||[]).length)).join(' · ');
+    const tot=COLS.reduce((s,k)=>s+(d[k]||[]).length,0);
+    add(tot?'ok':'warn','Lectura de la hoja','Hoja leída en '+Math.round(performance.now()-t1)+' ms · '+n,tot?'':'La hoja está vacía (normal la primera vez). Use «Subir todo a Sheets» para cargar los datos de este navegador.')}
+   catch(e){const m=e.message||String(e);let a='Revise el mensaje en el editor de Apps Script → Ejecuciones.';
+    if(/authoriz|autoriza|permiso|permission/i.test(m))a='El propietario debe ejecutar una función una vez desde el editor y aceptar los permisos (Revisar permisos → Avanzado → Permitir); luego crear una «Nueva versión» de la implementación.';
+    else if(/spreadsheet|hoja|openById|cannot find|no se encontr|SHEET/i.test(m))a='Revise el ID de la hoja de cálculo configurado en Code.gs o en las propiedades del script, y que la cuenta que ejecuta el script tenga acceso a esa hoja.';
+    else if(/token|autoriz|denegad|unauthor/i.test(m))a='Revise que el token coincida con APP_TOKEN.';
+    add('crit','Lectura de la hoja','Falló la lectura: «'+m+'»',a)}}
+ }catch(e){if(e!==0){add('crit','Diagnóstico','Error inesperado: '+(e&&e.message||e),'Copie el informe y envíelo para revisarlo.')}}
+ finally{document.removeEventListener('securitypolicyviolation',onV);corriendo='';pintar();
+  const peor=R.find(r=>r.e==='crit')||R.find(r=>r.e==='warn');
+  const concl=peor?'<div class="concl"><b>Causa más probable:</b> '+dxEsc(peor.d)+(peor.a?'<br>'+dxEsc(peor.a):'')+'</div>':'<div class="concl"><b>✔ La conexión funciona.</b> Pulse «Guardar y conectar» para sincronizar.</div>';
+  dxTxt=['DIAGNÓSTICO IGC FUEL CONTROL · '+new Date().toLocaleString('es-CO'),'Página: '+location.protocol+'//'+(location.host||'(archivo local)'),'Navegador: '+navigator.userAgent,'URL: '+dxMask(url),'Token: '+(token?'escrito ('+token.length+' caracteres)':'vacío'),'']
+   .concat(R.map((r,i)=>(i+1)+'. ['+({ok:'OK',warn:'ALERTA',crit:'FALLA'}[r.e])+'] '+r.t+' — '+r.d+(r.a?' → '+r.a:''))).join('\n');
+  const abrir=/^https:\/\//i.test(url)?'<p class="small"><a href="'+dxEsc(url)+'" target="_blank" rel="noopener">Abrir la URL en una pestaña nueva</a> (prueba manual: si muestra una pantalla de inicio de sesión de Google, el acceso no es «Cualquier persona»; si muestra texto, JSON o un error de «doGet», el acceso está bien).</p>':'';
+  out.insertAdjacentHTML('beforeend',concl+'<div class="row" style="margin:10px 0"><button class="btn sec sm" id="dx-copy" type="button">Copiar informe</button><button class="btn sec sm" id="dx-again" type="button">Repetir diagnóstico</button></div>'+abrir
+   +'<details class="man"><summary>Lista de verificación de la implementación en Apps Script</summary><ol class="small">'
+   +'<li>En el editor: <b>Implementar → Nueva implementación → Aplicación web</b>.</li>'
+   +'<li><b>Ejecutar como:</b> Yo (su cuenta). <b>Quién tiene acceso:</b> <b>Cualquier persona</b> (no «Solo yo» ni «Cualquier usuario con cuenta de Google»).</li>'
+   +'<li>Copie la <b>URL de la aplicación web</b> (termina en <code>/exec</code>) y péguela en el campo de arriba.</li>'
+   +'<li>Cada vez que cambie Code.gs: <b>Implementar → Administrar implementaciones → ✏ → Versión: Nueva versión → Implementar</b>. Sin esto la URL sigue ejecutando el código anterior.</li>'
+   +'<li>Primera vez: ejecute una función desde el editor y acepte los permisos (Revisar permisos → Avanzado → Ir a… → Permitir).</li>'
+   +'<li>Propiedades del script: <b>APP_TOKEN</b> debe ser idéntico al «Token de acceso» de esta pantalla.</li>'
+   +'<li>Cuentas Google Workspace: el administrador puede impedir el acceso «Cualquier persona»; en ese caso use una cuenta personal de Gmail o pida habilitarlo.</li>'
+   +'<li>Si abre el aplicativo desde un chat, vista previa o página publicada de otra herramienta, la conexión externa se bloquea: use el archivo index.html local o su hosting.</li></ol></details>');
+  $('#dx-copy').onclick=()=>{const f=()=>prompt('Copie el informe (Ctrl+C):',dxTxt);try{navigator.clipboard.writeText(dxTxt).then(()=>toast('Informe copiado'),f)}catch(e){f()}};
+  $('#dx-again').onclick=diagnosticar;
+  dxBusy=false;try{out.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){}}
+}
 async function subirArchivoSat(lote,f){if(!CL.url||!f)return;
  try{const b64=await new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result.split(',')[1]);x.readAsDataURL(f)});const j=await cloud('uploadFile',{name:f.name,mime:f.type||'application/octet-stream',b64});const l=S.satLotes.find(x=>x.id===lote);if(l){l.url=j.url;save();renderSatrack()}}
  catch(e){toast('Informe importado, pero no se pudo guardar el archivo en Drive: '+e.message)}}
@@ -1782,13 +1906,15 @@ function initExtra(){
  $('#fa-del').onclick=()=>{if(S.facturas.length&&confirm('¿Eliminar todas las facturas cargadas? Los tanqueos no se tocan.')){S.facturas=[];save();renderAll()}};
  $('#g-dim').onchange=renderGerencial;
  [['#c-tpre','tolPreop'],['#c-tfp','tolFacPct'],['#c-tfd','tolFacDias'],['#c-tfv','tolFacValor'],['#c-rfp','rfPct']].forEach(([s,k])=>$(s).onchange=()=>{const v=num($(s).value);if(v==null||v<0)return renderCloudCfg();S.config[k]=v;save();renderAll()});
- $('#cl-ok').onclick=()=>{CL={url:$('#cl-url').value.trim(),token:$('#cl-tok').value.trim()};localStorage.setItem(CK,JSON.stringify(CL));pulled=false;pull()};
+ $('#cl-ok').onclick=()=>{CL={url:$('#cl-url').value.trim(),token:$('#cl-tok').value.trim()};localStorage.setItem(CK,JSON.stringify(CL));pulled=false;pull().then(()=>{if(!pulled&&CL.url)diagnosticar()})};
  $('#cl-up').onclick=async()=>{if(!CL.url)return toast('Configure primero la URL');if(!confirm('Esto reemplaza el contenido de Google Sheets con los datos de este navegador. ¿Continuar?'))return;pulled=true;await push();toast('Datos subidos a Google Sheets')};
  $('#cl-down').onclick=()=>{if(!CL.url)return toast('Configure primero la URL');if(confirm('Esto reemplaza los datos de este navegador con los de Google Sheets. ¿Continuar?')){pulled=false;pull()}};
  $('#sat-api').onclick=async()=>{if(!CL.url)return toast('Configure primero la conexión con Apps Script');
   const d=prompt('Desde (AAAA-MM-DD):',isoD(Date.now()-7*DIA));if(!d)return;const h=prompt('Hasta (AAAA-MM-DD):',isoD(Date.now()));if(!h)return;
   try{toast('Consultando Satrack…');const j=await cloud('satrack',{desde:d,hasta:h});if(!j.rows||!j.rows.length)return toast('Satrack no devolvió registros');
    satPrev={nombre:'API Satrack '+d+' a '+h,rows:[['Placa','Desde','Hasta','Km recorridos','Ralentí (h)'],...j.rows.map(x=>[x.placa,x.desde,x.hasta,x.km,x.ralentiH==null?'':x.ralentiH])]};satMapear()}catch(e){toast('Satrack: '+e.message)}};
+ $('#cl-dx').onclick=diagnosticar;
+ {const sy=$('#sync');sy.title='Clic para diagnosticar la conexión con Google Sheets';sy.onclick=()=>{goTab('config');diagnosticar()}}
  renderCloudCfg()}
 
 /* ===================== Arranque ===================== */
