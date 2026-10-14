@@ -308,10 +308,12 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
 <section id="tab-satrack">
   <div class="card">
     <h2>Informe de Satrack</h2>
-    <p class="muted small" style="margin-top:0">Suba el informe de recorridos de Satrack (PDF, Excel o CSV). Cada fila es un intervalo con los km recorridos (el punto de partida siempre es 0). El sistema los asigna a los períodos de tanqueo de cada vehículo y los compara con odómetro y viajes. Si vuelve a subir el mismo intervalo, se actualiza y no se duplica.</p>
+    <p class="muted small" style="margin-top:0">Suba el informe de recorridos de Satrack (PDF, Excel o CSV). Cada fila es un intervalo con los km recorridos (el punto de partida siempre es 0). El sistema los asigna a los períodos de tanqueo de cada vehículo y los compara con odómetro y viajes. Si vuelve a subir el mismo intervalo, se actualiza y no se duplica. <b>API de Satrack:</b> trae los eventos de los últimos 5 días (límite del servicio) y calcula los km de cada día como la diferencia de odómetro entre el primer y el último evento; puede tardar varios minutos porque Satrack permite 4 consultas por minuto.</p>
     <div class="row">
       <button class="btn" type="button" id="sat-btn">Subir informe (PDF, Excel o CSV)</button>
       <button class="btn sec" type="button" id="sat-api">Sincronizar desde API Satrack</button>
+      <button class="btn sec" type="button" id="sat-test">Probar conexión Satrack</button>
+      <label class="small" style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="sat-ral" style="width:auto"> Estimar ralentí (más consultas, más lento)</label>
       <input type="file" id="sat-file" accept=".csv,.txt,.xlsx,.xls,.pdf" hidden>
     </div>
     <div id="sat-map" style="margin-top:12px"></div>
@@ -469,7 +471,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <input type="file" id="d-file" accept="application/json" hidden>
       <button class="btn dng" id="d-borrar">Borrar todo</button>
     </div>
-    <p class="muted small">Los datos se guardan en este navegador y, si Google Sheets está conectado, también allí (las fotos solo en IndexedDB de este navegador). El respaldo JSON no incluye fotos. La conexión directa al API de Satrack se hace desde el backend con los endpoints contratados; mientras tanto, el informe se carga por archivo.</p>
+    <p class="muted small">Los datos se guardan en este navegador y, si Google Sheets está conectado, también allí (las fotos solo en IndexedDB de este navegador). El respaldo JSON no incluye fotos. La conexión con la API de Satrack se hace desde Apps Script (las credenciales viven solo en las propiedades del script); el informe también puede cargarse por archivo.</p>
   </div>
 </section>
 </main>
@@ -1909,13 +1911,83 @@ function initExtra(){
  $('#cl-ok').onclick=()=>{CL={url:$('#cl-url').value.trim(),token:$('#cl-tok').value.trim()};localStorage.setItem(CK,JSON.stringify(CL));pulled=false;pull().then(()=>{if(!pulled&&CL.url)diagnosticar()})};
  $('#cl-up').onclick=async()=>{if(!CL.url)return toast('Configure primero la URL');if(!confirm('Esto reemplaza el contenido de Google Sheets con los datos de este navegador. ¿Continuar?'))return;pulled=true;await push();toast('Datos subidos a Google Sheets')};
  $('#cl-down').onclick=()=>{if(!CL.url)return toast('Configure primero la URL');if(confirm('Esto reemplaza los datos de este navegador con los de Google Sheets. ¿Continuar?')){pulled=false;pull()}};
- $('#sat-api').onclick=async()=>{if(!CL.url)return toast('Configure primero la conexión con Apps Script');
-  const d=prompt('Desde (AAAA-MM-DD):',isoD(Date.now()-7*DIA));if(!d)return;const h=prompt('Hasta (AAAA-MM-DD):',isoD(Date.now()));if(!h)return;
-  try{toast('Consultando Satrack…');const j=await cloud('satrack',{desde:d,hasta:h});if(!j.rows||!j.rows.length)return toast('Satrack no devolvió registros');
-   satPrev={nombre:'API Satrack '+d+' a '+h,rows:[['Placa','Desde','Hasta','Km recorridos','Ralentí (h)'],...j.rows.map(x=>[x.placa,x.desde,x.hasta,x.km,x.ralentiH==null?'':x.ralentiH])]};satMapear()}catch(e){toast('Satrack: '+e.message)}};
+ $('#sat-api').onclick=satApiSync;$('#sat-test').onclick=satProbar;
  $('#cl-dx').onclick=diagnosticar;
  {const sy=$('#sync');sy.title='Clic para diagnosticar la conexión con Google Sheets';sy.onclick=()=>{goTab('config');diagnosticar()}}
  renderCloudCfg()}
+
+
+/* ===================== Sincronización con la API de Satrack ===================== */
+/* Las credenciales NO están aquí: viven en las propiedades del script de Apps Script. */
+let satSyncing=false,satCancel=false;
+function satErrInfo(e){
+  const r=(e&&e.extra&&e.extra.resp)||{};let code=r.code||'',msg=(e&&e.message)||String(e);
+  if(!code&&/no est[aá] configurado/i.test(msg))
+    return{code:'LEGADO',msg:'Su Apps Script sigue respondiendo con el código anterior. Agregue Satrack.gs al proyecto, enlace la acción «satrack» de doPost a satrackRoute_(req) y publique una Nueva versión de la implementación.'};
+  if(code==='SAT_NO_CONFIG')msg+=' Agréguelas en Apps Script → Configuración del proyecto → Propiedades del script.';
+  return{code,msg};
+}
+function satProg(t,btn){const el=$('#sat-map');el.innerHTML='<div class="card" style="margin:0"><p class="small" id="sat-prog" style="margin:0 0 8px">'+esc(t)+'</p>'+(btn?'<button class="btn sec sm" type="button" id="sat-cancel">Cancelar</button>':'')+'</div>';
+  if(btn)$('#sat-cancel').onclick=()=>{satCancel=true;$('#sat-cancel').disabled=true;toast('Cancelando al terminar la consulta en curso…')}}
+async function satProbar(){
+  if(!CL.url)return toast('Configure primero la conexión con Apps Script');
+  try{toast('Probando conexión con Satrack…');const j=await cloud('satrack',{op:'estado',probar:true},null,90000);
+    if(!j.configurado)return toast('Satrack no está configurado en el script. Faltan: '+(j.faltan||[]).join(', '));
+    toast('Autenticación con Satrack correcta')}
+  catch(e){toast('Satrack: '+satErrInfo(e).msg)}}
+async function satApiSync(){
+  if(!CL.url)return toast('Configure primero la conexión con Apps Script');
+  if(satSyncing)return toast('Ya hay una sincronización en curso');
+  const hoy=isoD(Date.now()),min=isoD(Date.now()-5*DIA);
+  const d=prompt('Desde (AAAA-MM-DD). Satrack solo conserva los últimos 5 días ('+min+' en adelante):',isoD(Date.now()-2*DIA));if(!d)return;
+  const h=prompt('Hasta (AAAA-MM-DD):',hoy);if(!h)return;
+  const re=/^\d{4}-\d{2}-\d{2}$/;
+  if(!re.test(d)||!re.test(h)||isNaN(Date.parse(d+'T00:00'))||isNaN(Date.parse(h+'T00:00')))return toast('Use el formato AAAA-MM-DD');
+  if(d>h)return toast('La fecha inicial no puede ser posterior a la final');
+  if(d<min||h>hoy)return toast('Satrack solo entrega los últimos 5 días (entre '+min+' y '+hoy+'). Para fechas anteriores suba el informe por archivo.');
+  const placas=[...new Set([...S.vehiculos.map(v=>v.placa),...S.tanqueos.map(t=>t.placa)].map(normPlaca).filter(Boolean))].sort();
+  if(!placas.length)return toast('Registre primero los vehículos o tanqueos para saber qué placas consultar');
+  const dias=[];for(let t=new Date(d+'T00:00');isoD(t.getTime())<=h;t.setDate(t.getDate()+1))dias.push(isoD(t.getTime()));
+  const modo=$('#sat-ral').checked?'completo':'ligero',n=placas.length*dias.length;
+  satSyncing=true;satCancel=false;
+  try{
+    satProg('Verificando credenciales de Satrack…');
+    const st=await cloud('satrack',{op:'estado',probar:true},null,90000);
+    if(!st.configurado){$('#sat-map').innerHTML='';satSyncing=false;return alert('Satrack no está configurado en Apps Script.\n\nFaltan las propiedades: '+(st.faltan||[]).join(', ')+'.\n\nAgréguelas en Apps Script → Configuración del proyecto → Propiedades del script. Mientras tanto puede subir el informe por archivo.')}
+    const min2=Math.ceil(n*(modo==='completo'?1.5:0.75));
+    if(!confirm('Se consultarán '+n+' combinaciones vehículo-día ('+placas.length+' placas × '+dias.length+' días).\nSatrack permite 4 consultas por minuto: puede tardar unos '+min2+' minutos o más. Mantenga esta pestaña abierta.\n\n¿Continuar?')){$('#sat-map').innerHTML='';satSyncing=false;return}
+    const rows=[],fallos=[],sinDatos=[],omitidas=new Set();let k=0,seguidos=0,abort='';
+    for(const p of placas){
+      for(const dia of dias){
+        if(satCancel){abort='Cancelado por el usuario.';break}
+        if(omitidas.has(p))break;
+        k++;satProg('Consultando Satrack '+k+' de '+n+' · '+p+' · '+dia+'…',true);
+        try{
+          const j=await cloud('satrack',{op:'dia',placa:p,dia,modo},null,330000);seguidos=0;
+          if(j.km==null){sinDatos.push(p+' '+dia+': '+(j.aviso||'sin km'));continue}
+          rows.push([p,j.desde,j.hasta,j.km,j.ralentiH==null?'':j.ralentiH]);
+          if(j.incompleto)sinDatos.push(p+' '+dia+': resultado posiblemente incompleto');
+        }catch(e){
+          const x=satErrInfo(e);
+          if(x.code==='SAT_PLACA'){fallos.push(p+': '+x.msg);omitidas.add(p);continue}
+          if(['SAT_AUTH','SAT_NO_CONFIG','SAT_RANGO','LEGADO','SAT_LIMITE'].includes(x.code)){abort=x.msg;break}
+          fallos.push(p+' '+dia+': '+x.msg);if(++seguidos>=3){abort='Se detuvo tras 3 fallos seguidos. '+x.msg;break}
+        }
+      }
+      if(abort)break;
+    }
+    const inf='<div class="small" style="margin-bottom:10px">'+
+      (abort?'<p class="bad"><b>Sincronización interrumpida:</b> '+esc(abort)+'</p>':'')+
+      '<p><b>'+rows.length+'</b> registros con km de '+n+' consultas.'+(rows.length?' Revise la vista previa y pulse «Importar al sistema».':'')+'</p>'+
+      (fallos.length?'<details><summary>'+fallos.length+' consultas con error</summary><ul>'+fallos.slice(0,30).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></details>':'')+
+      (sinDatos.length?'<details><summary>'+sinDatos.length+' vehículo-día sin km utilizable</summary><ul>'+sinDatos.slice(0,40).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></details>':'')+
+      '<p class="muted">Los km se calculan con el odómetro del dispositivo Satrack (último menos primer evento del día); verifique que la unidad del odómetro sea kilómetros comparando un día conocido.</p></div>';
+    if(!rows.length){$('#sat-map').innerHTML=inf;return}
+    satPrev={nombre:'API Satrack '+d+' a '+h,rows:[['Placa','Desde','Hasta','Km recorridos','Ralentí (h)'],...rows]};
+    satMapear();$('#sat-map').insertAdjacentHTML('afterbegin',inf);
+  }catch(e){$('#sat-map').innerHTML='';const x=satErrInfo(e);toast('Satrack: '+x.msg);console.warn('Satrack',x.code)}
+  finally{satSyncing=false}
+}
 
 /* ===================== Arranque ===================== */
 function goTab(t){$$('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));$$('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+t));if(t==='gerencial')renderGerencial()}
