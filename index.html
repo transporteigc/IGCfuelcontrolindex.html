@@ -318,6 +318,24 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     </div>
     <div id="sat-map" style="margin-top:12px"></div>
   </div>
+  <div class="card" id="sat-live-card">
+    <h2>Telemetría completa en vivo · Satrack API</h2>
+    <p class="muted small">Consulta los campos originales devueltos por Satrack, métricas estimadas y eventos por vehículo. El histórico disponible está sujeto a la ventana de cinco días y a la habilitación de <code>byDate</code>.</p>
+    <div class="grid">
+      <div><label>Fecha inicial</label><input type="date" id="sat-live-inicio"></div>
+      <div><label>Fecha final</label><input type="date" id="sat-live-fin"></div>
+      <div><label>Placas (separadas por coma)</label><input id="sat-live-placas" value="SZW818, SRO483, TGS004" placeholder="SZW818, SRO483"></div>
+      <div><label>Límite de velocidad (km/h, opcional)</label><input type="number" id="sat-live-limite" min="1" placeholder="Ej. 80"></div>
+      <div><label>Eventos por página</label><select id="sat-live-items"><option>50</option><option selected>100</option><option>200</option><option>500</option></select></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" type="button" id="sat-live-consultar">Consultar histórico completo</button>
+      <button class="btn sec" type="button" id="sat-live-ultimo">Consultar última telemetría</button>
+      <button class="btn sec" type="button" id="sat-live-limpiar">Limpiar resultados</button>
+    </div>
+    <div id="sat-live-status" style="margin-top:10px"></div>
+    <div id="sat-live-results" style="margin-top:12px"></div>
+  </div>
   <div class="card">
     <h2>Informes cargados</h2>
     <div class="wrap"><table class="tbl" id="tbl-lotes"></table></div>
@@ -2104,6 +2122,94 @@ function satCfgWire(){
   scEl('sc-placa').onkeydown=e=>{if(e.key==='Enter')scUltimo()};
   scLock(false)}
 
+
+/* ===================== SATRACK: VISTA COMPLETA DE TELEMETRÍA ===================== */
+function satLiveInit(){
+  const hoy=isoD(Date.now()),min=isoD(Date.now()-5*DIA);
+  const a=$('#sat-live-inicio'),b=$('#sat-live-fin');
+  if(a&&!a.value)a.value=isoD(Date.now()-DIA);
+  if(b&&!b.value)b.value=hoy;
+}
+function satLivePlacas(){
+  return [...new Set($('#sat-live-placas').value.split(/[,;\s]+/).map(normPlaca).filter(Boolean))];
+}
+function satLiveStatus(msg,kind='na'){
+  const el=$('#sat-live-status'); if(el)el.innerHTML='<div class="banner '+esc(kind)+'">'+esc(msg)+'</div>';
+}
+function satLiveVal(v){
+  if(v===null||v===undefined||v==='')return '—';
+  if(typeof v==='object')return JSON.stringify(v);
+  return String(v);
+}
+function satLiveTable(obj,title){
+  if(!obj||typeof obj!=='object')return '';
+  const rows=Object.keys(obj).map(k=>'<tr><th>'+esc(k)+'</th><td style="white-space:pre-wrap;overflow-wrap:anywhere">'+esc(satLiveVal(obj[k]))+'</td></tr>').join('');
+  return '<details class="man" open><summary>'+esc(title)+'</summary><div class="wrap"><table class="tbl">'+rows+'</table></div></details>';
+}
+function satLiveRender(j,modo){
+  const out=$('#sat-live-results');let html='';
+  html+='<div class="kpis">'+[
+    ['Fuente',j.fuente||'Satrack API'],['Tipo de consulta',j.tipoConsulta||modo],
+    ['Eventos recibidos',j.cantidadEventos??j.cantidadRecibida??0],
+    ['Placas consultadas',j.cantidadPlacas??j.cantidadSolicitada??(j.vehiculos||[]).length],
+    ['Consultado',j.consultadoEn||'—']
+  ].map(x=>'<div class="kpi"><small>'+esc(String(x[0]))+'</small><b>'+esc(String(x[1]))+'</b></div>').join('')+'</div>';
+  if(j.fechaInicial||j.fechaFinal)html+='<p class="muted small">Rango: '+esc(j.fechaInicial||'')+' — '+esc(j.fechaFinal||'')+' · Zona horaria: '+esc(j.zonaHoraria||'America/Bogota')+'</p>';
+  if(j.errores&&j.errores.length)html+='<div class="banner crit"><b>Errores de consulta</b>'+j.errores.map(e=>'<p class="small">'+esc(e.placa||'')+' · página '+esc(e.pagina||'')+' · '+esc(e.error||'')+'</p>').join('')+'</div>';
+  if(j.resumenPlacas)html+='<h3>Resumen por placa</h3><div class="wrap"><table class="tbl"><tr><th>Placa</th><th>Eventos</th><th>Páginas</th><th>Estado</th></tr>'+j.resumenPlacas.map(x=>'<tr><td><b>'+esc(x.placa)+'</b></td><td>'+esc(x.eventos)+'</td><td>'+esc(x.paginasConsultadas)+'</td><td>'+esc(x.estado)+'</td></tr>').join('')+'</table></div>';
+  const grupos=j.porPlaca?Object.values(j.porPlaca):null;
+  if(grupos){
+    grupos.forEach(g=>{
+      html+='<details class="man" open><summary>'+esc(g.placa)+' · '+esc(g.cantidadEventos)+' eventos</summary>';
+      html+=satLiveTable(g.metricas,'Métricas e indicadores estimados');
+      html+='<h4>Eventos originales y campos normalizados</h4>';
+      if(!g.eventos||!g.eventos.length)html+='<p class="muted small">Sin eventos para esta placa en el rango.</p>';
+      else html+='<div class="wrap"><table class="tbl"><thead><tr><th>Fecha evento</th><th>Código</th><th>Descripción</th><th>Velocidad</th><th>Odómetro</th><th>Ignición</th><th>Ubicación</th><th>Clasificación</th><th>Todos los campos originales</th></tr></thead><tbody>'+
+        g.eventos.map((e,i)=>'<tr><td>'+esc(e.fechaEvento||'')+'</td><td>'+esc(satLiveVal(e.codigoEvento))+'</td><td>'+esc(e.descripcion||'')+'</td><td>'+esc(satLiveVal(e.velocidad))+'</td><td>'+esc(satLiveVal(e.odometro))+'</td><td>'+esc(satLiveVal(e.encendido))+'</td><td>'+esc([e.ubicacion&&e.ubicacion.direccion,e.ubicacion&&e.ubicacion.ciudad,e.ubicacion&&e.ubicacion.departamento,e.ubicacion&&e.ubicacion.latitud,e.ubicacion&&e.ubicacion.longitud].filter(Boolean).join(' · '))+'</td><td>'+esc(satLiveVal(e.clasificacion))+'</td><td><details><summary>Ver JSON</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-width:500px">'+esc(JSON.stringify(e.datosOriginales||e,null,2))+'</pre></details></td></tr>').join('')+'</tbody></table></div>';
+      html+='</details>';
+    });
+  } else if(j.vehiculos){
+    j.vehiculos.forEach(v=>{
+      html+='<details class="man" open><summary>'+esc(v.placa)+' · '+(v.disponible?'Lectura disponible':'Sin lectura')+'</summary>';
+      html+=satLiveTable(v,'Todos los datos devueltos para el vehículo');
+      if(v.datosOriginales)html+=satLiveTable(v.datosOriginales,'Evento original completo de Satrack');
+      html+='</details>';
+    });
+  }
+  if(j.eventos&&!grupos)html+=satLiveTable(j.eventos,'Eventos');
+  if(j.nota)html+='<p class="muted small">'+esc(j.nota)+'</p>';
+  if(j.advertencias)html+='<details class="man"><summary>Advertencias sobre las estimaciones</summary><ul>'+j.advertencias.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></details>';
+  out.innerHTML=html||'<p class="muted small">Satrack no devolvió información.</p>';
+}
+async function satLiveConsultar(ultimo=false){
+  if(!CL.url)return satLiveStatus('Configure primero la URL de la aplicación web y el Token de acceso en Configuración.','crit');
+  const placas=satLivePlacas();if(!placas.length)return satLiveStatus('Ingrese al menos una placa válida.','crit');
+  const btn=$('#sat-live-consultar'),btn2=$('#sat-live-ultimo');btn.disabled=btn2.disabled=true;
+  $('#sat-live-results').innerHTML='';satLiveStatus('Consultando Satrack. La consulta histórica puede tardar según el volumen de eventos…');
+  try{
+    let j;
+    if(ultimo){
+      j=await cloud('satrack_telemetria',{placas},null,120000);
+    }else{
+      const inicio=$('#sat-live-inicio').value,fin=$('#sat-live-fin').value;
+      if(!inicio||!fin)throw new Error('Seleccione la fecha inicial y final.');
+      if(inicio>fin)throw new Error('La fecha inicial no puede ser posterior a la final.');
+      const hoy=isoD(Date.now()),min=isoD(Date.now()-5*DIA);
+      if(inicio<min||fin>hoy)throw new Error('La API permite consultar solo la ventana reciente de cinco días ('+min+' a '+hoy+').');
+      j=await cloud('satrack_historial',{placas,fechaInicio:inicio,fechaFin:fin,itemsPerPage:Number($('#sat-live-items').value)||100,limiteVelocidad:Number($('#sat-live-limite').value)||null},null,240000);
+    }
+    satLiveRender(j,ultimo?'última telemetría':'histórico');
+    satLiveStatus(j.ok===false?'Consulta completada con errores parciales. Revise el detalle por placa.':'Consulta completada. Se muestran los datos recibidos de Satrack.','ok');
+  }catch(e){satLiveStatus(satErrInfo(e).msg,'crit')}
+  finally{btn.disabled=btn2.disabled=false}
+}
+function satLiveWire(){
+  satLiveInit();
+  $('#sat-live-consultar').onclick=()=>satLiveConsultar(false);
+  $('#sat-live-ultimo').onclick=()=>satLiveConsultar(true);
+  $('#sat-live-limpiar').onclick=()=>{$('#sat-live-results').innerHTML='';$('#sat-live-status').innerHTML=''};
+}
+
 /* ===================== Arranque ===================== */
 function goTab(t){$$('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));$$('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+t));if(t==='gerencial')renderGerencial();if(t==='config'&&typeof satCfgLoad==='function')satCfgLoad()}
 function renderAll(){
@@ -2130,7 +2236,7 @@ $('#sat-placa').onchange=renderSatrack;
 $('#m-mes').onchange=renderMensual;$('#m-vista').onchange=renderMensual;
 $('#g-mes').onchange=renderGerencial;$('#g-placa').onchange=renderGerencial;
 $$('.sel-base').forEach(s=>s.onchange=()=>{S.config.baseKm=s.value;save();renderAll()});
-bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();
+bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();satLiveWire();
 </script>
 </body>
 </html>
