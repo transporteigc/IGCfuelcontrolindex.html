@@ -460,6 +460,32 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="cl-dx" type="button">🩺 Diagnosticar conexión</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button><button class="btn sec" id="pdf-todo" type="button">⬇ Exportar TODO a PDF</button></div>
     <div id="dx-out" style="display:none;margin-top:14px"></div>
   </div>
+
+  <div class="card" id="sc-card">
+    <h2>Configuración de conexión Satrack</h2>
+    <p class="muted small" style="margin-top:0">Ingrese aquí las credenciales entregadas por Satrack. El <b>Secret</b> viaja una sola vez, por HTTPS, a su Apps Script y se guarda en las <i>propiedades del script</i>: no se guarda en este navegador ni en Google Sheets, y no se puede volver a leer. Requiere la URL y el Token de acceso de la sección anterior.</p>
+    <div id="sc-msg" class="banner na" style="display:none"></div>
+    <div class="grid">
+      <div><label>Client_id *</label><input id="sc-id" autocomplete="off" spellcheck="false"></div>
+      <div><label>Secret *</label><div style="display:flex;gap:6px"><input id="sc-sec" type="password" autocomplete="new-password" spellcheck="false"><button class="btn sec sm" type="button" id="sc-ver" title="Mostrar u ocultar lo que escribe">Mostrar</button></div></div>
+      <div><label>Grant_type (tipo de concesión) *</label><input id="sc-gt" autocomplete="off" spellcheck="false" placeholder="Valor indicado por Satrack"></div>
+      <div><label>URL de autenticación</label><input id="sc-au" spellcheck="false" placeholder="https://externalsecurityapi.satrack.com/api/v1/Keycloak/authenticate"></div>
+      <div><label>URL del servicio API</label><input id="sc-lu" spellcheck="false" placeholder="http://locationintegrationapi.satrack.com/api/location"></div>
+      <div><label>Clave de administración *</label><input id="sc-adm" type="password" autocomplete="new-password"><div class="muted small" id="sc-adm-h" style="margin-top:3px"></div></div>
+    </div>
+    <p class="muted small">Las URL solo pueden ser de dominios satrack.com (las del manual técnico vienen por defecto). El nombre técnico del parámetro es <code>grant_type</code>.</p>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" type="button" id="sc-guardar">Guardar configuración</button>
+      <button class="btn sec" type="button" id="sc-probar">Probar conexión</button>
+      <button class="btn sec" type="button" id="sc-editar">Editar configuración</button>
+      <button class="btn sec" type="button" id="sc-limpiar">Limpiar campos</button>
+      <button class="btn dng sm" type="button" id="sc-borrar" title="Elimina las credenciales guardadas en el servidor">Eliminar credenciales guardadas</button>
+    </div>
+    <h3 style="margin:18px 0 6px">Consulta de datos autorizados</h3>
+    <p class="muted small" style="margin-top:0">Consulta en vivo el último evento de una placa en Satrack (no se guarda; para guardar km use «Sincronizar desde API Satrack» en la pestaña Informe Satrack).</p>
+    <div class="row"><div style="min-width:180px"><label>Placa</label><input id="sc-placa" placeholder="Ej.: ABC123" autocomplete="off"></div><button class="btn sec" type="button" id="sc-ult-btn">Consultar último evento</button></div>
+    <div id="sc-ult" style="margin-top:10px"></div>
+  </div>
   <div class="card">
     <h2>Datos</h2>
     <p class="muted small" style="margin-top:0"><b>Regla fundamental:</b> el módulo conserva siempre la información original. Nunca reemplaza el odómetro por Satrack, Satrack por odómetro ni la ruta por el recorrido GPS: cada fuente se guarda de forma independiente y el sistema concilia sin borrar las diferencias.</p>
@@ -1911,7 +1937,7 @@ function initExtra(){
  $('#cl-ok').onclick=()=>{CL={url:$('#cl-url').value.trim(),token:$('#cl-tok').value.trim()};localStorage.setItem(CK,JSON.stringify(CL));pulled=false;pull().then(()=>{if(!pulled&&CL.url)diagnosticar()})};
  $('#cl-up').onclick=async()=>{if(!CL.url)return toast('Configure primero la URL');if(!confirm('Esto reemplaza el contenido de Google Sheets con los datos de este navegador. ¿Continuar?'))return;pulled=true;await push();toast('Datos subidos a Google Sheets')};
  $('#cl-down').onclick=()=>{if(!CL.url)return toast('Configure primero la URL');if(confirm('Esto reemplaza los datos de este navegador con los de Google Sheets. ¿Continuar?')){pulled=false;pull()}};
- $('#sat-api').onclick=satApiSync;$('#sat-test').onclick=satProbar;
+ $('#sat-api').onclick=satApiSync;$('#sat-test').onclick=satProbar;satCfgWire();
  $('#cl-dx').onclick=diagnosticar;
  {const sy=$('#sync');sy.title='Clic para diagnosticar la conexión con Google Sheets';sy.onclick=()=>{goTab('config');diagnosticar()}}
  renderCloudCfg()}
@@ -1924,16 +1950,17 @@ function satErrInfo(e){
   const r=(e&&e.extra&&e.extra.resp)||{};let code=r.code||'',msg=(e&&e.message)||String(e);
   if(!code&&/no est[aá] configurado/i.test(msg))
     return{code:'LEGADO',msg:'Su Apps Script sigue respondiendo con el código anterior. Agregue Satrack.gs al proyecto, enlace la acción «satrack» de doPost a satrackRoute_(req) y publique una Nueva versión de la implementación.'};
-  if(code==='SAT_NO_CONFIG')msg+=' Agréguelas en Apps Script → Configuración del proyecto → Propiedades del script.';
+  if(!code&&/acci[oó]n no soportada/i.test(msg))
+    return{code:'SIN_HOOK',msg:'El Apps Script publicado no reconoce las acciones de Satrack («Acción no soportada»). Pegue Satrack.gs (v2), agregue como primeras líneas de doPost «var sat = satrackDoPost_(e); if (sat) return sat;» y publique una Nueva versión de la implementación.'};
+  if(code==='SAT_NO_CONFIG')msg+=' Guárdelas en «Configuración de conexión Satrack» (pestaña Configuración).';
   return{code,msg};
 }
 function satProg(t,btn){const el=$('#sat-map');el.innerHTML='<div class="card" style="margin:0"><p class="small" id="sat-prog" style="margin:0 0 8px">'+esc(t)+'</p>'+(btn?'<button class="btn sec sm" type="button" id="sat-cancel">Cancelar</button>':'')+'</div>';
   if(btn)$('#sat-cancel').onclick=()=>{satCancel=true;$('#sat-cancel').disabled=true;toast('Cancelando al terminar la consulta en curso…')}}
 async function satProbar(){
   if(!CL.url)return toast('Configure primero la conexión con Apps Script');
-  try{toast('Probando conexión con Satrack…');const j=await cloud('satrack',{op:'estado',probar:true},null,90000);
-    if(!j.configurado)return toast('Satrack no está configurado en el script. Faltan: '+(j.faltan||[]).join(', '));
-    toast('Autenticación con Satrack correcta')}
+  try{toast('Autenticando con Satrack…');const j=await cloud('satrack_probar',{},null,90000);
+    toast(j.autenticado?'Autenticación con Satrack exitosa (token vigente ~'+j.expiraMin+' min)':'Satrack no confirmó la autenticación')}
   catch(e){toast('Satrack: '+satErrInfo(e).msg)}}
 async function satApiSync(){
   if(!CL.url)return toast('Configure primero la conexión con Apps Script');
@@ -1952,7 +1979,7 @@ async function satApiSync(){
   satSyncing=true;satCancel=false;
   try{
     satProg('Verificando credenciales de Satrack…');
-    const st=await cloud('satrack',{op:'estado',probar:true},null,90000);
+    const st=await cloud('satrack_estado',{probar:true},null,90000);
     if(!st.configurado){$('#sat-map').innerHTML='';satSyncing=false;return alert('Satrack no está configurado en Apps Script.\n\nFaltan las propiedades: '+(st.faltan||[]).join(', ')+'.\n\nAgréguelas en Apps Script → Configuración del proyecto → Propiedades del script. Mientras tanto puede subir el informe por archivo.')}
     const min2=Math.ceil(n*(modo==='completo'?1.5:0.75));
     if(!confirm('Se consultarán '+n+' combinaciones vehículo-día ('+placas.length+' placas × '+dias.length+' días).\nSatrack permite 4 consultas por minuto: puede tardar unos '+min2+' minutos o más. Mantenga esta pestaña abierta.\n\n¿Continuar?')){$('#sat-map').innerHTML='';satSyncing=false;return}
@@ -1963,14 +1990,14 @@ async function satApiSync(){
         if(omitidas.has(p))break;
         k++;satProg('Consultando Satrack '+k+' de '+n+' · '+p+' · '+dia+'…',true);
         try{
-          const j=await cloud('satrack',{op:'dia',placa:p,dia,modo},null,330000);seguidos=0;
+          const j=await cloud('satrack_dia',{placa:p,dia,modo},null,330000);seguidos=0;
           if(j.km==null){sinDatos.push(p+' '+dia+': '+(j.aviso||'sin km'));continue}
           rows.push([p,j.desde,j.hasta,j.km,j.ralentiH==null?'':j.ralentiH]);
           if(j.incompleto)sinDatos.push(p+' '+dia+': resultado posiblemente incompleto');
         }catch(e){
           const x=satErrInfo(e);
           if(x.code==='SAT_PLACA'){fallos.push(p+': '+x.msg);omitidas.add(p);continue}
-          if(['SAT_AUTH','SAT_NO_CONFIG','SAT_RANGO','LEGADO','SAT_LIMITE'].includes(x.code)){abort=x.msg;break}
+          if(['SAT_AUTH','SAT_NO_CONFIG','SAT_RANGO','LEGADO','SIN_HOOK','SAT_SIN_APP_TOKEN','SAT_TOKEN','SAT_LIMITE'].includes(x.code)){abort=x.msg;break}
           fallos.push(p+' '+dia+': '+x.msg);if(++seguidos>=3){abort='Se detuvo tras 3 fallos seguidos. '+x.msg;break}
         }
       }
@@ -1989,8 +2016,78 @@ async function satApiSync(){
   finally{satSyncing=false}
 }
 
+
+/* ===================== Módulo: Configuración de conexión Satrack ===================== */
+/* El Secret se envía una sola vez al backend y NUNCA se guarda aquí: ni en S, ni en localStorage, ni en Sheets. */
+const SC={est:null};
+const scEl=id=>document.getElementById(id);
+function scMsg(kind,txt){const m=scEl('sc-msg');m.className='banner '+kind;m.textContent=txt;m.style.display='block'}
+function scF(){return{clientId:scEl('sc-id').value.trim(),grantType:scEl('sc-gt').value.trim(),authUrl:scEl('sc-au').value.trim(),locUrl:scEl('sc-lu').value.trim(),secret:scEl('sc-sec').value,adminKey:scEl('sc-adm').value}}
+function scLock(b){['sc-id','sc-sec','sc-gt','sc-au','sc-lu'].forEach(i=>scEl(i).disabled=b);scEl('sc-guardar').disabled=b;scEl('sc-editar').disabled=!b}
+function scOculta(){scEl('sc-sec').type='password';scEl('sc-ver').textContent='Mostrar'}
+function scRender(){const e=SC.est;if(!e)return;
+  scEl('sc-id').value=e.clientId||'';scEl('sc-gt').value=e.grantType||'';scEl('sc-au').value=e.authUrl||'';scEl('sc-lu').value=e.locUrl||'';scEl('sc-sec').value='';scOculta();
+  scEl('sc-sec').placeholder=e.secretGuardado?'•••••••• guardado en el servidor (vacío = conservar)':'Pegue aquí el secret de Satrack';
+  scEl('sc-adm').placeholder=e.adminDefinida?'Clave de administración':'Primera vez: cree una (mín. 8 caracteres)';
+  scEl('sc-adm-h').textContent=e.adminDefinida?'Se pide para guardar o eliminar credenciales.':'Aún no existe: la que escriba al guardar quedará registrada.';
+  scLock(!!e.configurado)}
+function scDirty(){const f=scF(),e=SC.est||{};return !!f.secret||f.clientId!==(e.clientId||'')||f.grantType!==(e.grantType||'')||f.authUrl!==(e.authUrl||'')||f.locUrl!==(e.locUrl||'')}
+async function satCfgLoad(){
+  if(!CL.url)return scMsg('warn','Configure primero la URL de la aplicación web y el Token de acceso (sección anterior).');
+  try{scMsg('na','Consultando la configuración guardada en el servidor…');SC.est=await cloud('satrack_config_estado',{},null,60000);scRender();
+    scMsg(SC.est.configurado?'na':'warn',SC.est.configurado?'Hay credenciales guardadas en el servidor. Aún no se ha verificado la conexión: pulse «Probar conexión».':'Satrack no está configurado. Faltan: '+SC.est.faltan.join(', ')+'.')}
+  catch(e){scMsg('crit',satErrInfo(e).msg)}}
+async function scGuardar(){
+  if(!CL.url)return scMsg('crit','Configure primero la URL de la aplicación web y el Token de acceso.');
+  const f=scF(),e=SC.est||{},falt=[];
+  if(!f.clientId)falt.push('Client_id');if(!f.secret&&!e.secretGuardado)falt.push('Secret');if(!f.grantType)falt.push('Grant_type');if(!f.adminKey)falt.push('Clave de administración');
+  if(falt.length)return scMsg('crit','Complete los campos obligatorios: '+falt.join(', ')+'.');
+  if(f.authUrl&&!/^https:\/\/([a-z0-9-]+\.)*satrack\.com(\/[^\s?#]*)?$/i.test(f.authUrl))return scMsg('crit','La URL de autenticación debe ser https y de un dominio satrack.com.');
+  if(f.locUrl&&!/^https?:\/\/([a-z0-9-]+\.)*satrack\.com(:\d+)?(\/[^\s?#]*)?$/i.test(f.locUrl))return scMsg('crit','La URL del servicio API debe ser http(s) y de un dominio satrack.com.');
+  if(!e.adminDefinida&&f.adminKey.length<8)return scMsg('crit','La clave de administración debe tener al menos 8 caracteres.');
+  try{scMsg('na','Guardando en el servidor…');const j=await cloud('satrack_config_guardar',f,null,60000);
+    scEl('sc-sec').value='';scEl('sc-adm').value='';SC.est=j;scRender();
+    scMsg('warn','Configuración guardada en el servidor. La conexión todavía NO está verificada: pulse «Probar conexión».')}
+  catch(err){scMsg('crit','No se guardó: '+satErrInfo(err).msg)}}
+async function scProbar(){
+  if(!CL.url)return scMsg('crit','Configure primero la URL de la aplicación web y el Token de acceso.');
+  if(!SC.est){await satCfgLoad();if(!SC.est)return}
+  const f=scF(),e=SC.est,falt=[];
+  if(!f.clientId)falt.push('Client_id');if(!f.secret&&!e.secretGuardado)falt.push('Secret');if(!f.grantType)falt.push('Grant_type');
+  if(falt.length)return scMsg('crit','Complete los campos obligatorios antes de probar: '+falt.join(', ')+'.');
+  if(scDirty())return scMsg('warn','Hay cambios sin guardar. Pulse «Guardar configuración» y luego «Probar conexión»: la prueba usa lo guardado en el servidor.');
+  try{scMsg('na','Autenticando con Satrack…');const j=await cloud('satrack_probar',{},null,90000);
+    if(!j.autenticado)throw new Error('Satrack no confirmó la autenticación');
+    scMsg('ok','Autenticación exitosa con Satrack (token '+(j.tokenType||'')+', vigente ~'+j.expiraMin+' min). Solo se verificó la autenticación; para validar datos use «Consultar último evento».')}
+  catch(err){scMsg('crit','No se pudo autenticar con Satrack: '+satErrInfo(err).msg)}}
+function scEditar(){scLock(false);scMsg('na','Edición habilitada. El secret no se muestra: déjelo vacío para conservar el guardado, o escriba uno nuevo.')}
+function scLimpiar(){['sc-id','sc-sec','sc-gt','sc-au','sc-lu','sc-adm'].forEach(i=>scEl(i).value='');scOculta();scLock(false);
+  scMsg('na','Campos limpiados en este formulario. Lo guardado en el servidor no cambia hasta que pulse «Guardar configuración».')}
+async function scBorrar(){
+  if(!CL.url)return scMsg('crit','Configure primero la URL de la aplicación web y el Token de acceso.');
+  const f=scF();if(!f.adminKey)return scMsg('crit','Escriba la clave de administración para eliminar las credenciales guardadas.');
+  if(!confirm('¿Eliminar del servidor el Client_id, el Secret, el Grant_type y las URL de Satrack?\nLa importación manual de informes seguirá disponible.'))return;
+  try{scMsg('na','Eliminando…');const j=await cloud('satrack_config_borrar',{adminKey:f.adminKey},null,60000);
+    scEl('sc-adm').value='';SC.est=j;scRender();scMsg('warn','Credenciales eliminadas del servidor. Satrack queda sin configurar.')}
+  catch(err){scMsg('crit','No se eliminó: '+satErrInfo(err).msg)}}
+async function scUltimo(){
+  const box=scEl('sc-ult'),p=normPlaca(scEl('sc-placa').value);
+  if(!CL.url){box.innerHTML='<p class="bad small">Configure primero la conexión con Apps Script.</p>';return}
+  if(!p){box.innerHTML='<p class="bad small">Escriba una placa.</p>';return}
+  box.innerHTML='<p class="muted small">Consultando Satrack…</p>';
+  try{const j=await cloud('satrack_ultimo',{placa:p},null,120000),ev=j.eventos||[];
+    if(!ev.length){box.innerHTML='<p class="small">La consulta fue correcta, pero Satrack no devolvió eventos para '+esc(p)+'.</p>';return}
+    box.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Placa</th><th>Fecha y hora</th><th>Evento</th><th class="n">Velocidad</th><th class="n">Odómetro</th><th>Ignición</th><th>Ciudad</th><th>Dirección</th><th>Estado</th></tr>'+
+      ev.map(x=>'<tr><td><b>'+esc(x.placa)+'</b></td><td>'+esc(x.fecha||'')+'</td><td>'+esc((x.codigo||'')+' · '+(x.evento||''))+'</td><td class="n">'+esc(x.velocidad==null?'—':x.velocidad)+'</td><td class="n">'+esc(x.odometro==null?'—':x.odometro)+'</td><td>'+(x.ignicion==1?'Encendido':x.ignicion===0||x.ignicion==='0'?'Apagado':'—')+'</td><td>'+esc(x.ciudad||'')+'</td><td>'+esc(x.direccion||'')+'</td><td>'+esc(x.estado||'')+'</td></tr>').join('')+'</table></div>'}
+  catch(err){box.innerHTML='<p class="bad small">'+esc(satErrInfo(err).msg)+'</p>'}}
+function satCfgWire(){
+  scEl('sc-guardar').onclick=scGuardar;scEl('sc-probar').onclick=scProbar;scEl('sc-editar').onclick=scEditar;scEl('sc-limpiar').onclick=scLimpiar;scEl('sc-borrar').onclick=scBorrar;scEl('sc-ult-btn').onclick=scUltimo;
+  scEl('sc-ver').onclick=()=>{const i=scEl('sc-sec'),v=i.type==='password';i.type=v?'text':'password';scEl('sc-ver').textContent=v?'Ocultar':'Mostrar'};
+  scEl('sc-placa').onkeydown=e=>{if(e.key==='Enter')scUltimo()};
+  scLock(false)}
+
 /* ===================== Arranque ===================== */
-function goTab(t){$$('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));$$('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+t));if(t==='gerencial')renderGerencial()}
+function goTab(t){$$('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));$$('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+t));if(t==='gerencial')renderGerencial();if(t==='config'&&typeof satCfgLoad==='function')satCfgLoad()}
 function renderAll(){
   renderResumen();renderTanqueos();renderViajes();renderSatrack();renderConfig();renderPre();renderPreComp();renderFacturas();renderCloudCfg();
   const g=$('#g-mes');if(g&&!g.options.length)fillMeses();
