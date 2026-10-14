@@ -477,10 +477,12 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     <div class="row" style="margin-top:8px">
       <button class="btn" type="button" id="sc-guardar">Guardar configuración</button>
       <button class="btn sec" type="button" id="sc-probar">Probar conexión</button>
+      <button class="btn sec" type="button" id="sc-diag-btn">Generar diagnóstico</button>
       <button class="btn sec" type="button" id="sc-editar">Editar configuración</button>
       <button class="btn sec" type="button" id="sc-limpiar">Limpiar campos</button>
       <button class="btn dng sm" type="button" id="sc-borrar" title="Elimina las credenciales guardadas en el servidor">Eliminar credenciales guardadas</button>
     </div>
+    <div id="sc-diag" style="margin-top:12px"></div>
     <h3 style="margin:18px 0 6px">Consulta de datos autorizados</h3>
     <p class="muted small" style="margin-top:0">Consulta en vivo el último evento de una placa en Satrack (no se guarda; para guardar km use «Sincronizar desde API Satrack» en la pestaña Informe Satrack).</p>
     <div class="row"><div style="min-width:180px"><label>Placa</label><input id="sc-placa" placeholder="Ej.: ABC123" autocomplete="off"></div><button class="btn sec" type="button" id="sc-ult-btn">Consultar último evento</button></div>
@@ -2080,8 +2082,24 @@ async function scUltimo(){
     box.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Placa</th><th>Fecha y hora</th><th>Evento</th><th class="n">Velocidad</th><th class="n">Odómetro</th><th>Ignición</th><th>Ciudad</th><th>Dirección</th><th>Estado</th></tr>'+
       ev.map(x=>'<tr><td><b>'+esc(x.placa)+'</b></td><td>'+esc(x.fecha||'')+'</td><td>'+esc((x.codigo||'')+' · '+(x.evento||''))+'</td><td class="n">'+esc(x.velocidad==null?'—':x.velocidad)+'</td><td class="n">'+esc(x.odometro==null?'—':x.odometro)+'</td><td>'+(x.ignicion==1?'Encendido':x.ignicion===0||x.ignicion==='0'?'Apagado':'—')+'</td><td>'+esc(x.ciudad||'')+'</td><td>'+esc(x.direccion||'')+'</td><td>'+esc(x.estado||'')+'</td></tr>').join('')+'</table></div>'}
   catch(err){box.innerHTML='<p class="bad small">'+esc(satErrInfo(err).msg)+'</p>'}}
+async function scDiag(){
+  const box=scEl('sc-diag'),btn=scEl('sc-diag-btn');
+  if(!CL.url){box.innerHTML='<div class="banner crit">Configure primero la URL de la aplicación web y el Token de acceso.</div>';return}
+  box.innerHTML='<div class="banner na">Ejecutando el diagnóstico de Satrack en el servidor (puede tardar hasta un minuto)…</div>';btn.disabled=true;
+  try{
+    const j=await cloud('satrack_diagnostico',{},null,120000),P=j.pasos||[],ic={ok:'OK',warn:'AVISO',crit:'FALLO'},
+      txt='Diagnóstico Satrack · '+new Date().toLocaleString('es-CO')+'\n'+P.map(p=>'['+(ic[p.estado]||p.estado)+'] '+p.titulo+(p.detalle?' — '+p.detalle:'')).join('\n');
+    box.innerHTML='<h3 style="margin:0 0 6px">Diagnóstico de la conexión con Satrack</h3>'+
+      P.map(p=>'<div class="banner '+esc(p.estado)+'" style="margin:6px 0"><b>'+esc(p.titulo)+'</b>'+(p.detalle?'<div class="small" style="margin-top:2px">'+esc(p.detalle)+'</div>':'')+'</div>').join('')+
+      '<div class="row" style="margin-top:8px"><button class="btn sec sm" type="button" id="sc-diag-copy">Copiar diagnóstico</button></div>'+
+      '<p class="muted small">El diagnóstico nunca muestra el Secret ni el token de Satrack, por lo que puede compartirlo con el soporte.</p>';
+    scEl('sc-diag-copy').onclick=()=>{(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Diagnóstico copiado')).catch(()=>{const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();try{document.execCommand('copy');toast('Diagnóstico copiado')}catch(e){toast('No se pudo copiar')}t.remove()})}
+  }catch(e){
+    const m=satErrInfo(e).msg;
+    box.innerHTML='<div class="banner crit"><b>No se pudo generar el diagnóstico</b><div class="small" style="margin-top:2px">'+esc(/no soportada/i.test(e.message||'')?'El Apps Script publicado no tiene la versión nueva de Code.gs. Péguela y publique una Nueva versión de la implementación.':m)+'</div></div>'}
+  finally{btn.disabled=false}}
 function satCfgWire(){
-  scEl('sc-guardar').onclick=scGuardar;scEl('sc-probar').onclick=scProbar;scEl('sc-editar').onclick=scEditar;scEl('sc-limpiar').onclick=scLimpiar;scEl('sc-borrar').onclick=scBorrar;scEl('sc-ult-btn').onclick=scUltimo;
+  scEl('sc-guardar').onclick=scGuardar;scEl('sc-probar').onclick=scProbar;scEl('sc-editar').onclick=scEditar;scEl('sc-limpiar').onclick=scLimpiar;scEl('sc-borrar').onclick=scBorrar;scEl('sc-ult-btn').onclick=scUltimo;scEl('sc-diag-btn').onclick=scDiag;
   scEl('sc-ver').onclick=()=>{const i=scEl('sc-sec'),v=i.type==='password';i.type=v?'text':'password';scEl('sc-ver').textContent=v?'Ocultar':'Mostrar'};
   scEl('sc-placa').onkeydown=e=>{if(e.key==='Enter')scUltimo()};
   scLock(false)}
