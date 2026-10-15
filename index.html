@@ -271,7 +271,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
   <div class="card">
     <h2>Conciliación de tanqueos con facturas electrónicas de combustible</h2>
     <p class="muted small" style="margin-top:0">Suba las facturas del proveedor: XML (factura electrónica DIAN o AttachedDocument), ZIP con XML, o Excel/CSV con columnas Factura, Fecha, Galones, Valor (Placa, Desde y Hasta son opcionales). <b>Notas crédito:</b> súbalas por el mismo botón (XML <i>CreditNote</i> o ZIP); se asocian a la factura que afectan y se descuentan de sus galones y valor (la factura queda en neto). En Excel/CSV agregue la columna <b>Tipo</b> («Nota crédito») y <b>Factura afectada</b>. Una factura puede cubrir varios tanqueos de varios vehículos en un intervalo de días: en la tabla <b>Conciliación por factura</b> use <b>Conciliar</b> para asociarle los tanqueos ya registrados, ver las diferencias, comentarlas y aplicar la retención en la fuente. Las facturas que traen placa y que usted no asocia manualmente se cruzan solas, línea a línea, en la segunda tabla.</p>
-    <div class="row"><button class="btn" id="fa-btn" type="button">Subir facturas</button><input type="file" id="fa-file" multiple accept=".xml,.zip,.csv,.txt,.xlsx,.xls" hidden>
+    <div class="row"><button class="btn" id="fa-btn" type="button">Subir facturas</button><button class="btn sec" id="fa-nc-btn" type="button">Subir notas crédito</button><input type="file" id="fa-nc-file" multiple accept=".xml,.zip,.csv,.txt,.xlsx,.xls" hidden><input type="file" id="fa-file" multiple accept=".xml,.zip,.csv,.txt,.xlsx,.xls" hidden>
       <div style="min-width:190px"><label>Mostrar</label><select id="fa-est"><option value="">Todo</option><option value="ok">Conciliado</option><option value="warn">Con diferencia</option><option value="crit">Sin cruce</option></select></div>
       <button class="btn dng sm" id="fa-del" type="button">Eliminar facturas cargadas</button></div>
     <details class="man"><summary>Registrar una factura manualmente</summary>
@@ -337,6 +337,12 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     </div>
     <div id="sat-live-status" style="margin-top:10px"></div>
     <div id="sat-live-results" style="margin-top:12px"></div>
+  </div>
+  <div class="card" id="sat-pdf-card">
+    <h2>Estadísticas de Satrack por intervalo entre tanqueos (PDF)</h2>
+    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack para el intervalo entre dos tanqueos. El sistema intenta leer del PDF el vehículo, las fechas, los km recorridos y el ralentí; usted confirma o corrige antes de guardar. Al guardar, los km quedan como Satrack de ese intervalo (reemplazan los registros diarios del mismo intervalo para no duplicar) y el PDF queda adjunto en «Informes cargados».</p>
+    <div class="row"><button class="btn" type="button" id="sp-btn">Adjuntar PDF(s) de estadísticas</button><input type="file" id="sp-file" accept=".pdf,application/pdf" multiple hidden></div>
+    <div id="sp-out" style="margin-top:12px"></div>
   </div>
   <div class="card">
     <h2>Informes cargados</h2>
@@ -507,19 +513,6 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     <p class="muted small" style="margin-top:0">Consulta en vivo el último evento de una placa en Satrack (no se guarda; para guardar km use «Sincronizar desde API Satrack» en la pestaña Informe Satrack).</p>
     <div class="row"><div style="min-width:180px"><label>Placa</label><input id="sc-placa" placeholder="Ej.: ABC123" autocomplete="off"></div><button class="btn sec" type="button" id="sc-ult-btn">Consultar último evento</button></div>
     <div id="sc-ult" style="margin-top:10px"></div>
-  </div>
-  <div class="card">
-    <h2>Datos</h2>
-    <p class="muted small" style="margin-top:0"><b>Regla fundamental:</b> el módulo conserva siempre la información original. Nunca reemplaza el odómetro por Satrack, Satrack por odómetro ni la ruta por el recorrido GPS: cada fuente se guarda de forma independiente y el sistema concilia sin borrar las diferencias.</p>
-    <div class="row">
-      <button class="btn sec" id="d-demo">Cargar datos de ejemplo</button>
-      <button class="btn sec" id="d-csv">Exportar conciliación (CSV)</button>
-      <button class="btn sec" id="d-json">Respaldo (JSON)</button>
-      <button class="btn sec" id="d-imp">Importar respaldo</button>
-      <input type="file" id="d-file" accept="application/json" hidden>
-      <button class="btn dng" id="d-borrar">Borrar todo</button>
-    </div>
-    <p class="muted small">Los datos se guardan en este navegador y, si Google Sheets está conectado, también allí (las fotos solo en IndexedDB de este navegador). El respaldo JSON no incluye fotos. La conexión con la API de Satrack se hace desde Apps Script (las credenciales viven solo en las propiedades del script); el informe también puede cargarse por archivo.</p>
   </div>
 </section>
 </main>
@@ -847,7 +840,7 @@ function tablaGrupos(G,titulo){
 function renderMensual(){
   const mes=$('#m-mes').value,vista=$('#m-vista').value,modo=S.config.baseKm,out=$('#m-out');
   const per=periodosFiltrados(mes,''),tq=S.tanqueos.filter(r=>!mes||r.fecha.startsWith(mes));
-  if(!per.length&&!tq.length){out.innerHTML='<p class="muted">Sin datos para consultar. Registre tanqueos o cargue los datos de ejemplo en Configuración.</p>';return}
+  if(!per.length&&!tq.length){out.innerHTML='<p class="muted">Sin datos para consultar. Registre tanqueos para comenzar.</p>';return}
   if(vista==='vehiculo'){out.innerHTML='<p class="muted small">Tanqueado y gasto corresponden a las compras del mes; los demás indicadores a los períodos que cierran en el mes.</p>'+tablaVehiculos(per,tq,modo);return}
   if(vista==='conductor'){out.innerHTML=tablaGrupos(agruparPor(per,'cond',modo),'Conductor');return}
   if(vista==='ruta'){out.innerHTML=tablaGrupos(agruparPor(per,'ruta',modo),'Ruta');return}
@@ -861,7 +854,7 @@ function renderResumen(){
   fillMeses();selBase();renderMensual();
   const per=todosPeriodos().sort((a,b)=>dtT(b.B)-dtT(a.B));
   const t=$('#tbl-periodos');
-  $('#vacio-periodos').textContent=per.length?'':'Aún no hay períodos. Registre al menos dos tanqueos full del mismo vehículo, o cargue los datos de ejemplo en Configuración.';
+  $('#vacio-periodos').textContent=per.length?'':'Aún no hay períodos. Registre al menos dos tanqueos full del mismo vehículo.';
   t.innerHTML=per.length?`<tr><th>Vehículo</th><th>Período</th><th class="n">Km odómetro</th><th class="n">Km Satrack</th><th class="n">Dif. %</th><th class="n">Viajes</th><th class="n">Combustible</th><th class="n">Dif. galones vs estándar</th><th>Estado</th><th>Rutas repetidas</th><th>Calidad del dato</th></tr>`+
     per.map(p=>{const k=p.placa+'|'+p.B.id;
       const rep=p.rep?(p.rep.alerta?chip(Math.abs(p.rep.pct)>S.config.tolRepeticion*2?'crit':'warn',(p.rep.dif>0?'+':'−')+fmt(Math.abs(p.rep.pct),0)+' % galones'):chip('ok','Similar')):'<span class="muted">—</span>';
@@ -1225,8 +1218,9 @@ function satImportar(m,unidad){
 }
 function renderSatrack(){
   const lotes=S.satLotes;
-  $('#tbl-lotes').innerHTML=lotes.length?`<tr><th>Archivo</th><th>Cargado</th><th class="n">Registros vigentes</th><th></th></tr>`+lotes.map(l=>`<tr><td>${l.url?`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.archivo)}</a>`:esc(l.archivo)}</td><td>${fdt(l.fecha)}</td><td class="n">${S.satrack.filter(s=>s.lote===l.id).length}</td><td class="n"><button class="btn sec sm" data-dl="${l.id}">Eliminar registros</button></td></tr>`).join(''):'<tr><td class="muted">Aún no se ha cargado ningún informe de Satrack.</td></tr>';
-  $$('#tbl-lotes [data-dl]').forEach(b=>b.onclick=()=>{if(confirm('¿Eliminar los registros de este informe? Los tanqueos y viajes no se tocan.')){S.satrack=S.satrack.filter(s=>s.lote!==b.dataset.dl);S.satLotes=S.satLotes.filter(l=>l.id!==b.dataset.dl);save();renderAll()}});
+  $('#tbl-lotes').innerHTML=lotes.length?`<tr><th>Archivo</th><th>Cargado</th><th class="n">Registros vigentes</th><th></th></tr>`+lotes.map(l=>`<tr><td>${l.url?`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.archivo)}</a>`:esc(l.archivo)}${l.intervalo?'<div class="small muted">Intervalo: '+esc(l.intervalo)+'</div>':''}</td><td>${fdt(l.fecha)}</td><td class="n">${S.satrack.filter(s=>s.lote===l.id).length}</td><td class="n">${l.pdf?`<button class="btn sec sm" data-vp="${l.id}">Ver PDF</button> `:''}<button class="btn sec sm" data-dl="${l.id}">Eliminar registros</button></td></tr>`).join(''):'<tr><td class="muted">Aún no se ha cargado ningún informe de Satrack.</td></tr>';
+  $$('#tbl-lotes [data-dl]').forEach(b=>b.onclick=()=>{if(confirm('¿Eliminar los registros de este informe? Los tanqueos y viajes no se tocan.')){S.satrack=S.satrack.filter(s=>s.lote!==b.dataset.dl);S.satLotes=S.satLotes.filter(l=>l.id!==b.dataset.dl);fDel('satpdf:'+b.dataset.dl);save();renderAll()}});
+  $$('#tbl-lotes [data-vp]').forEach(b=>b.onclick=()=>spVer(b.dataset.vp));
   const sel=$('#sat-placa'),cur=sel.value,pl=[...new Set(S.satrack.map(s=>s.placa))].sort();
   sel.innerHTML='<option value="">Toda la flota</option>'+pl.map(p=>`<option>${esc(p)}</option>`).join('');if(pl.includes(cur))sel.value=cur;
   const rows=S.satrack.filter(s=>!sel.value||s.placa===sel.value).sort((a,b)=>b.t0-a.t0);
@@ -1352,12 +1346,6 @@ function bindConfig(){
     const v={placa:normPlaca($('#vh-placa').value),capacidad:num($('#vh-cap').value),std:num($('#vh-std').value),ralenti:num($('#vh-ral').value)};
     if(!v.placa||!v.std)return;const i=S.vehiculos.findIndex(x=>x.placa===v.placa);if(i>=0)S.vehiculos[i]=v;else S.vehiculos.push(v);
     $('#f-veh').reset();save();renderAll();toast('Vehículo guardado')};
-  $('#d-demo').onclick=()=>{if(S.tanqueos.some(r=>r.placa==='SZW818')&&!confirm('Ya existen datos de SZW818. Se agregarán datos de ejemplo adicionales. ¿Continuar?'))return;loadDemo()};
-  $('#d-csv').onclick=exportCSV;
-  $('#d-json').onclick=()=>descargar('respaldo-km-igc.json',JSON.stringify(S,null,1),'application/json');
-  $('#d-imp').onclick=()=>$('#d-file').click();
-  $('#d-file').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.tanqueos)throw 0;if(!confirm('Esto reemplazará los datos actuales. ¿Continuar?'))return;S=normState(o);save();renderAll();toast('Respaldo importado')}catch(x){toast('Archivo no válido')}};rd.readAsText(f);e.target.value=''};
-  $('#d-borrar').onclick=()=>{if(confirm('¿Borrar TODOS los datos de este módulo? Si Google Sheets está conectado, también se borrarán allí. No se puede deshacer.')){S.tanqueos.forEach(r=>{fDel(r.id+':odo');fDel(r.id+':comp')});S=defaults();save();selKey=null;renderAll()}};
 }
 function descargar(n,txt,tipo){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:tipo+';charset=utf-8'}));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function exportCSV(){
@@ -1587,28 +1575,30 @@ function parseFacturaXML(txt,arch){
  if(d.documentElement.localName==='AttachedDocument'){let inner=null;for(const e of ds(d,'Description')){if(/<(\w+:)?(Invoice|CreditNote)[\s>]/.test(e.textContent)){inner=e.textContent;break}}if(!inner)return[];d=P(inner)}
  const r=d.documentElement;if(r.localName!=='Invoice'&&r.localName!=='CreditNote')return[];
  const esNC=r.localName==='CreditNote',sg_=esNC?-1:1;
- const br=ds(r,'BillingReference')[0],refFac=br?((ds(br,'ID')[0]||{}).textContent||'').trim():'';
+ const refs=[...ds(r,'BillingReference')].map(b=>((ds(b,'ID')[0]||{}).textContent||'').trim()).filter(Boolean),refFac=refs[0]||'';
  const fac=ch(r,'ID'),fecha=ch(r,'IssueDate'),hora=ch(r,'IssueTime').slice(0,5),sup=ds(r,'AccountingSupplierParty')[0],prov=sup&&ds(sup,'RegistrationName')[0],nit=sup&&ds(sup,'CompanyID')[0];
  const notas=[...r.children].filter(x=>x.localName==='Note').map(x=>x.textContent).join(' '),ip=ds(r,'InvoicePeriod')[0],pIni=ip?ch(ip,'StartDate'):'',pFin=ip?ch(ip,'EndDate'):'';
  return[...ds(r,esNC?'CreditNoteLine':'InvoiceLine')].map(l=>{const q=ds(l,esNC?'CreditedQuantity':'InvoicedQuantity')[0],cant=parseFloat(q&&q.textContent),u=(q&&q.getAttribute('unitCode'))||'';
-  const gal=u==='LTR'?cant/3.785411784:cant,val=parseFloat(ch(l,'LineExtensionAmount')),desc=((ds(l,'Description')[0]||{}).textContent||'').trim(),m=(desc+' '+notas).toUpperCase().match(/\b([A-Z]{3})[\s\-]?(\d{3})\b/);
-  return{factura:fac,fecha,hora,proveedor:prov?prov.textContent.trim():'',nit:nit?nit.textContent.trim():'',placa:m?m[1]+m[2]:'',desc:desc.slice(0,80),gal:isNaN(gal)?null:+(gal*sg_).toFixed(3),valor:isNaN(val)?null:val*sg_,archivo:arch,u,pIni,pFin,tipo:esNC?'NC':'FE',ref:esNC?refFac:''}})
-  .filter(x=>x.gal!=null&&Math.abs(x.gal)>0&&(/GLL|LTR/.test(x.u)||/ACPM|DIESEL|GASOLINA|COMBUSTIBLE/i.test(x.desc)))}
-function facDeTabla(rows,arch){
- const hi=rows.findIndex(r=>{const h=r.map(norm);return h.some(x=>/fecha/.test(x))&&h.some(x=>/galon|cantidad/.test(x))});if(hi<0)return[];
+  const val=parseFloat(ch(l,'LineExtensionAmount')),desc=((ds(l,'Description')[0]||{}).textContent||'').trim(),esComb=/GLL|LTR/.test(u)||/ACPM|DIESEL|GASOLINA|COMBUSTIBLE/i.test(desc),m=(desc+' '+notas).toUpperCase().match(/\b([A-Z]{3})[\s\-]?(\d{3})\b/);
+  let gal=u==='LTR'?cant/3.785411784:cant;if(esNC&&!esComb)gal=0;/* NC solo de valor (descuento/ajuste): no descuenta galones */
+  return{factura:fac,fecha,hora,proveedor:prov?prov.textContent.trim():'',nit:nit?nit.textContent.trim():'',placa:m?m[1]+m[2]:'',desc:desc.slice(0,80),gal:isNaN(gal)?null:(+(gal*sg_).toFixed(3))+0,valor:isNaN(val)?null:val*sg_,archivo:arch,u,pIni,pFin,tipo:esNC?'NC':'FE',ref:esNC?refFac:''}})
+  .filter(x=>esNC?((x.valor!=null&&x.valor!==0)||(x.gal!=null&&Math.abs(x.gal)>0)):(x.gal!=null&&Math.abs(x.gal)>0&&(/GLL|LTR/.test(x.u)||/ACPM|DIESEL|GASOLINA|COMBUSTIBLE/i.test(x.desc))))}
+function facDeTabla(rows,arch,forceNC){
+ const hi=rows.findIndex(r=>{const h=r.map(norm);return h.some(x=>/fecha/.test(x))&&h.some(x=>/galon|cantidad|valor|total/.test(x))});if(hi<0)return[];
  const h=rows[hi].map(norm),f=re=>h.findIndex(x=>re.test(x)),fa0=(...L)=>{for(const re of L){const i=f(re);if(i>=0)return i}return -1},c={tp:f(/^tipo/),rf:f(/afectada|referencia|factura asociada|factura origen/),n:fa0(/^(n\.?|numero|nro|no\.?)( de)?( factura| documento| nota)?$/,/^factura$/,/numero|nro|consecutivo/),f:fa0(/^fecha( de)?( emision| factura| expedicion)?$/,/fecha/),p:f(/placa|vehiculo/),pi:f(/desde|inicio/),pf:f(/hasta|^fin\b|final/),g:f(/galon|cantidad/),v:f(/valor|total|subtotal/),pr:f(/proveedor|estacion|razon/)};
- return rows.slice(hi+1).map(r=>{const d=parseFecha(r[c.f]);let gal=parseKm(r[c.g]);if(!d||!gal)return null;
-  const nTxt=c.n>=0?String(r[c.n]).trim():'',esNC=(c.tp>=0&&/nota|^nc|credito/.test(norm(r[c.tp])))||/^nc/i.test(nTxt)||gal<0;
-  let val=c.v>=0?parseKm(r[c.v]):null;if(esNC){gal=-Math.abs(gal);if(val!=null)val=-Math.abs(val)}
+ return rows.slice(hi+1).map(r=>{const d=parseFecha(r[c.f]);let gal=c.g>=0?parseKm(r[c.g]):null,val=c.v>=0?parseKm(r[c.v]):null;
+  const nTxt=c.n>=0?String(r[c.n]).trim():'',esNC=!!forceNC||(c.tp>=0&&/nota|^nc|credito/.test(norm(r[c.tp])))||/^nc/i.test(nTxt)||gal<0;
+  if(!d||(!gal&&!(esNC&&val)))return null;gal=gal||0;
+  if(esNC){gal=-Math.abs(gal)+0;if(val!=null)val=-Math.abs(val)}
   return{factura:nTxt,tipo:esNC?'NC':'FE',ref:esNC&&c.rf>=0?String(r[c.rf]).trim():'',fecha:d.iso.slice(0,10),hora:d.solo?'':d.iso.slice(11,16),proveedor:c.pr>=0?String(r[c.pr]).trim():'',nit:'',placa:c.p>=0?normPlaca(r[c.p]):'',desc:'',gal,valor:val,archivo:arch,pIni:c.pi>=0&&parseFecha(r[c.pi])?parseFecha(r[c.pi]).iso.slice(0,10):'',pFin:c.pf>=0&&parseFecha(r[c.pf])?parseFecha(r[c.pf]).iso.slice(0,10):''}}).filter(Boolean)}
-async function cargarFacturas(files){let nu=0,dup=0;
+async function cargarFacturas(files,forceNC){let nu=0,dup=0;
  const add=L=>L.forEach(f=>{const k=[f.factura,f.placa,f.fecha,f.gal,f.valor].join('|');if(S.facturas.some(x=>x.k===k)){dup++;return}f.k=k;f.id=uid();S.facturas.push(f);nu++});
  for(const file of files){const ext=file.name.split('.').pop().toLowerCase();
   try{if(ext==='xml')add(parseFacturaXML(await file.text(),file.name));
    else if(ext==='zip'){const z=await JSZip.loadAsync(file);for(const n of Object.keys(z.files))if(/\.xml$/i.test(n))add(parseFacturaXML(await z.files[n].async('string'),n))}
-   else add(facDeTabla(await leerTabla(file),file.name))}
+   else add(facDeTabla(await leerTabla(file),file.name,forceNC))}
   catch(e){toast('No se pudo leer '+file.name)}}
- save();renderAll();toast(nu+' líneas de factura cargadas'+(dup?' · '+dup+' repetidas omitidas':''))}
+ save();renderAll();toast(nu+' líneas cargadas'+(dup?' · '+dup+' repetidas omitidas':'')+(docsFac().some(d=>d.soloNC)?' · Hay notas crédito sin factura asociada: use «Asociar a factura» en la tabla':''))}
 function conciliarFac(){
  const AS=asociados(),tp=S.config.tolFacPct,td=S.config.tolFacDias,tv=S.config.tolFacValor,usados=new Set(AS.tq),out=[],dd=(a,b)=>Math.abs(Date.parse(a)-Date.parse(b))/DIA;
  [...S.facturas].sort((a,b)=>a.fecha<b.fecha?-1:1).forEach(f=>{
@@ -1636,7 +1626,13 @@ const esT=v=>v===true||v==='TRUE'||v==='true';
 const ids0=h=>String(h.tqIds||'').split(',').filter(Boolean);
 function docsFac(){const g=new Map(),byNum=new Map(),ncs=[];
  S.facturas.filter(f=>f.tipo!=='NC').forEach(f=>{const k=(f.factura||'s/n-'+f.id)+'|'+(f.nit||f.proveedor||'');let d=g.get(k);if(!d){d={key:k,head:f,lines:[],nc:[]};g.set(k,d);if(f.factura)byNum.set(norm(f.factura),d)}d.lines.push(f)});
- S.facturas.filter(f=>f.tipo==='NC').forEach(f=>{const d=f.ref?byNum.get(norm(f.ref)):null;if(d)d.nc.push(f);else ncs.push(f)});
+ const docsF=[...g.values()],cm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,''),sinPref=s=>cm(s).replace(/^[A-Z]+/,'');
+ /* asocia cada nota crédito a su factura: número exacto, o número sin prefijo; el NIT debe coincidir salvo asociación manual */
+ const buscar=f=>{const r=cm(f.ref);if(!r)return null;const mismo=x=>f.refManual||!f.nit||!x.head.nit||cm(x.head.nit)===cm(f.nit);
+  let c=docsF.filter(x=>cm(x.head.factura)===r&&mismo(x));
+  if(!c.length&&sinPref(f.ref))c=docsF.filter(x=>sinPref(x.head.factura)===sinPref(f.ref)&&mismo(x));
+  return c[0]||null};
+ S.facturas.filter(f=>f.tipo==='NC').forEach(f=>{const d=buscar(f);if(d)d.nc.push(f);else ncs.push(f)});
  /* NC sin factura afectada cargada: se muestran como documento propio para no perderlas */
  ncs.forEach(f=>{const k='NC|'+(f.factura||f.id)+'|'+(f.nit||f.proveedor||'');let d=g.get(k);if(!d){d={key:k,head:f,lines:[],nc:[],soloNC:true};g.set(k,d)}d.lines.push(f)});
  return[...g.values()].map(d=>{const L=d.lines,vs=L.filter(x=>isNum(x.valor)),N=d.nc;
@@ -1668,13 +1664,13 @@ function renderDocs(){const host=$('#fd-tbl');if(!host)return;
   +kp('Conciliadas / subsanadas',A.filter(r=>r.c.n==='ok').length)+kp('Con diferencia pendiente',A.filter(r=>r.c.e==='CON DIFERENCIA').length)+kp('Sin asociar',A.filter(r=>r.c.e==='SIN ASOCIAR').length)
   +kp('Valor total facturas',money(sum(A,r=>r.d.valor)),mes?mesTxt(mes):'todos los meses')+kp('Retención en la fuente',money(sum(A,r=>r.c.ret)),'sobre '+A.filter(r=>r.c.rfOn).length+' factura(s)')+kp('Neto a pagar',money(sum(A,r=>r.c.neto)),'valor − retención');
  host.innerHTML=V.length?'<tr><th>Estado</th><th>Factura</th><th>Fecha</th><th class="n">Gal. factura</th><th class="n">Valor factura</th><th class="n">Tanqueos</th><th class="n">Gal. tanqueos</th><th class="n">Dif. gal</th><th class="n">Dif. %</th><th class="n">Dif. valor</th><th class="n">Retención</th><th class="n">Neto a pagar</th><th>Comentarios</th><th></th></tr>'
-  +V.map(({d,c})=>`<tr><td>${chip(c.n,c.e)}</td><td><b>${esc(d.factura)}</b>${d.soloNC?' <span class="chip na">NC</span>':''}<div class="small muted">${esc(d.proveedor)}</div>${d.nc.length?'<div class="small" style="color:var(--warn)">NC '+esc(d.ncDocs.join(', ')||d.nc.length+' línea(s)')+': '+sgal(d.ncGal,2)+' · '+money(d.ncVal)+'</div>':''}</td><td>${d.fecha?fd(d.fecha):'—'}${d.head.pIni?`<div class="small muted">${fd(d.head.pIni)} a ${fd(d.head.pFin||d.head.pIni)}</div>`:''}</td><td class="n">${fmt(d.gal,2)}</td><td class="n">${money(d.valor)}</td><td class="n">${c.T.length||'—'}</td><td class="n">${c.T.length?fmt(c.tg,2):'—'}</td><td class="n">${c.dg==null?'—':sgal(c.dg,2)}</td><td class="n">${c.pg==null?'—':sg(c.pg)}</td><td class="n">${c.dv==null?'—':money(c.dv)}</td><td class="n">${c.rfOn?money(c.ret)+'<div class="small muted">'+fmt(c.pct,2)+' %</div>':'—'}</td><td class="n">${money(c.neto)}</td><td class="small">${nCom(d.head)?'💬 '+nCom(d.head):'—'}</td><td class="n"><button class="btn sm" data-cf="${d.head.id}">Conciliar</button></td></tr>`).join('')+totRowFac(V)
+  +V.map(({d,c})=>`<tr><td>${chip(c.n,c.e)}</td><td><b>${esc(d.factura)}</b>${d.soloNC?' <span class="chip na">NC</span>':''}<div class="small muted">${esc(d.proveedor)}</div>${d.nc.length?'<div class="small" style="color:var(--warn)">NC '+esc(d.ncDocs.join(', ')||d.nc.length+' línea(s)')+': '+sgal(d.ncGal,2)+' · '+money(d.ncVal)+'</div>':''}</td><td>${d.fecha?fd(d.fecha):'—'}${d.head.pIni?`<div class="small muted">${fd(d.head.pIni)} a ${fd(d.head.pFin||d.head.pIni)}</div>`:''}</td><td class="n">${fmt(d.gal,2)}</td><td class="n">${money(d.valor)}</td><td class="n">${c.T.length||'—'}</td><td class="n">${c.T.length?fmt(c.tg,2):'—'}</td><td class="n">${c.dg==null?'—':sgal(c.dg,2)}</td><td class="n">${c.pg==null?'—':sg(c.pg)}</td><td class="n">${c.dv==null?'—':money(c.dv)}</td><td class="n">${c.rfOn?money(c.ret)+'<div class="small muted">'+fmt(c.pct,2)+' %</div>':'—'}</td><td class="n">${money(c.neto)}</td><td class="small">${nCom(d.head)?'💬 '+nCom(d.head):'—'}</td><td class="n"><button class="btn sm" data-cf="${d.head.id}">${d.soloNC?'Asociar a factura':'Conciliar'}</button></td></tr>`).join('')+totRowFac(V)
   :'<tr><td class="muted">Suba las facturas del proveedor o regístrelas manualmente para asociarles los tanqueos.</td></tr>';
  $$('#fd-tbl [data-cf]').forEach(b=>b.onclick=()=>abrirDocFac(b.dataset.cf))}
 
 function guardarFacManual(){const g=i=>$(i).value.trim(),num_=g('#fm-num'),fecha=g('#fm-fecha'),gal=num($('#fm-gal').value),val=num($('#fm-val').value);
- if(!num_||!fecha||!(gal>0)||val==null)return toast('Complete N.º de factura, fecha, galones y valor');
- const nc=$('#fm-nc').checked,f={id:uid(),factura:num_,fecha,hora:'',proveedor:g('#fm-prov'),nit:g('#fm-nit'),placa:'',desc:nc?'Nota crédito (manual)':'Registro manual',gal:nc?-Math.abs(gal):gal,valor:nc?-Math.abs(val):val,archivo:'manual',pIni:g('#fm-ini'),pFin:g('#fm-fin'),tipo:nc?'NC':'FE',ref:nc?g('#fm-ref'):''};
+ if(!num_||!fecha||val==null||(!$('#fm-nc').checked&&!(gal>0)))return toast('Complete N.º de factura, fecha, galones y valor (en una nota crédito solo de valor, los galones pueden ir vacíos)');
+ const nc=$('#fm-nc').checked,f={id:uid(),factura:num_,fecha,hora:'',proveedor:g('#fm-prov'),nit:g('#fm-nit'),placa:'',desc:nc?'Nota crédito (manual)':'Registro manual',gal:nc?(-Math.abs(gal||0))+0:gal,valor:nc?-Math.abs(val):val,archivo:'manual',pIni:g('#fm-ini'),pFin:g('#fm-fin'),tipo:nc?'NC':'FE',ref:nc?g('#fm-ref'):''};
  if(nc&&!f.ref)return toast('Indique la factura afectada por la nota crédito');
  f.k=[f.factura,f.placa,f.fecha,f.gal,f.valor].join('|');if(S.facturas.some(x=>x.k===f.k))return toast('Esa factura ya está registrada');
  S.facturas.push(f);['#fm-num','#fm-prov','#fm-nit','#fm-fecha','#fm-ini','#fm-fin','#fm-gal','#fm-val','#fm-ref'].forEach(i=>$(i).value='');$('#fm-nc').checked=false;save();renderAll();toast('Factura registrada: ya puede asociarle tanqueos')}
@@ -1687,7 +1683,20 @@ function sugerirTq(items,target){const W=items.map(t=>Math.round(t.gal*10)),T=Ma
  const out=[];while(best>0){const i=from[best];out.push(items[i].id);best-=W[i]}return out}
 
 let DF=null;
-function abrirDocFac(id){const d=docsFac().find(x=>x.head.id===id);if(!d)return;const h=d.head,ids=new Set(ids0(h));
+function abrirNC(d){
+ const mismo=x=>!d.head.nit||x.head.nit===d.head.nit,ref0=d.head.ref||'';
+ const cand=docsFac().filter(x=>!x.soloNC&&x.head.factura).sort((a,b)=>(mismo(a)?0:1)-(mismo(b)?0:1)||(a.fecha<b.fecha?1:-1));
+ $('#dlg-fac-body').innerHTML=`<h2 style="margin:0">Nota crédito ${esc(d.factura)}</h2>
+ <div class="small muted">${esc(d.proveedor)} · emitida ${d.fecha?fd(d.fecha):'—'} · ${d.galBruto?sgal(d.galBruto,2)+' · ':''}${money(d.valorBruto)}</div>
+ <div class="banner warn" style="margin-top:10px">${ref0?'La factura que indica la nota ('+esc(ref0)+') no está cargada en el sistema.':'La nota no indica qué factura afecta.'} Seleccione la factura a la que aplica: se descontarán de ella el valor y los galones de la nota.</div>
+ <label>Factura afectada</label><select id="nc-fac"><option value="">— Seleccione —</option>${cand.map(x=>`<option value="${esc(x.head.id)}">${esc(x.factura)} · ${fd(x.fecha)} · ${esc(x.proveedor)} · ${fmt(x.gal,2)} gal · ${money(x.valor)}</option>`).join('')}</select>
+ <div class="row" style="margin-top:14px"><button class="btn" id="nc-ok" type="button">Asociar</button><button class="btn sec" id="nc-x" type="button">Cerrar</button><button class="btn dng sm" id="nc-del" type="button" style="margin-left:auto">Eliminar nota crédito</button></div>`;
+ $('#nc-x').onclick=()=>$('#dlg-fac').close();
+ $('#nc-ok').onclick=()=>{const t=cand.find(x=>x.head.id===$('#nc-fac').value);if(!t)return toast('Seleccione la factura afectada');
+  d.lines.forEach(l=>{l.ref=t.head.factura;l.refManual=true});save();$('#dlg-fac').close();renderAll();toast('Nota crédito asociada a la factura '+t.head.factura)};
+ $('#nc-del').onclick=()=>{if(confirm('¿Eliminar la nota crédito '+d.factura+' del sistema?')){const del=new Set(d.lines.map(l=>l.id));S.facturas=S.facturas.filter(x=>!del.has(x.id));save();$('#dlg-fac').close();renderAll()}};
+ $('#dlg-fac').showModal()}
+function abrirDocFac(id){const d=docsFac().find(x=>x.head.id===id);if(!d)return;if(d.soloNC)return abrirNC(d);const h=d.head,ids=new Set(ids0(h));
  let ini=h.pIni||'',fin=h.pFin||'';
  if(!ini||!fin){const L=[...ids].map(i=>S.tanqueos.find(t=>t.id===i)).filter(Boolean).map(t=>t.fecha).sort();
   if(L.length){ini=ini||L[0];fin=fin||L[L.length-1]}else{fin=fin||d.fecha;ini=ini||addDias(d.fecha,-15)}}
@@ -1696,6 +1705,7 @@ function abrirDocFac(id){const d=docsFac().find(x=>x.head.id===id);if(!d)return;
  $('#dlg-fac-body').innerHTML=`<h2 style="margin:0">Conciliar factura ${esc(d.factura)}</h2>
  <div class="small muted">${esc(d.proveedor)}${d.head.nit?' · NIT '+esc(d.head.nit):''} · emitida ${d.fecha?fd(d.fecha):'—'} · ${d.lines.length} línea(s)</div>
  <div class="kpis">${d.nc.length?kp('Galones factura (bruto)',fmt(d.galBruto,2))+kp('Valor factura (bruto)',money(d.valorBruto))+kp('Notas crédito'+(d.ncDocs.length?' ('+esc(d.ncDocs.join(', '))+')':''),sgal(d.ncGal,2)+' · '+money(d.ncVal)):''}${kp('Galones facturados'+(d.nc.length?' (neto)':''),fmt(d.gal,2))}${kp('Valor factura'+(d.nc.length?' (neto)':''),money(d.valor))}${kp('Precio implícito',d.valor&&d.gal?money(d.valor/d.gal)+' / gal':'—')}</div>
+ ${d.nc.length?`<h3>Notas crédito aplicadas a esta factura</h3><div class="wrap"><table class="tbl"><tr><th>Nota crédito</th><th>Fecha</th><th class="n">Galones</th><th class="n">Valor</th><th></th></tr>${d.nc.map(n=>`<tr><td><b>${esc(n.factura||'(sin número)')}</b></td><td>${n.fecha?fd(n.fecha):'—'}</td><td class="n">${n.gal?sgal(n.gal,2):'—'}</td><td class="n">${money(n.valor)}</td><td class="n"><button class="btn sec sm" type="button" data-unnc="${n.id}">Desasociar</button></td></tr>`).join('')}</table></div><p class="muted small">Los galones y el valor de la factura ya están en neto (factura − notas crédito).</p>`:''}
  <h3>1 · Tanqueos que cubre la factura</h3>
  <div class="grid"><div><label>Tanqueos desde</label><input type="date" id="dfa-ini" value="${ini}"></div><div><label>Tanqueos hasta</label><input type="date" id="dfa-fin" value="${fin}"></div>
  <div><label>Vehículo</label><select id="dfa-pl"><option value="">Todos</option>${pl.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div></div>
@@ -1733,6 +1743,8 @@ function abrirDocFac(id){const d=docsFac().find(x=>x.head.id===id);if(!d)return;
  $('#dfa-all').onclick=()=>{DF.vis.forEach(t=>DF.ids.add(t.id));lista()};$('#dfa-none').onclick=()=>{DF.ids.clear();lista()};
  $('#dfa-sug').onclick=()=>{const r=sugerirTq(DF.vis,d.gal);if(!r.length)return toast('No hay tanqueos disponibles en el período');DF.ids=new Set(r);lista();toast('Selección sugerida: revise que corresponda a la factura')};
  $('#dfa-x').onclick=()=>$('#dlg-fac').close();
+ $$('#dlg-fac-body [data-unnc]').forEach(b=>b.onclick=()=>{const l=S.facturas.find(x=>x.id===b.dataset.unnc);if(!l)return;
+  S.facturas.filter(x=>x.tipo==='NC'&&x.factura===l.factura&&x.nit===l.nit).forEach(x=>{x.ref='';x.refManual=false});save();$('#dlg-fac').close();renderAll();toast('Nota crédito desasociada: queda pendiente de asociar')});
  $('#dfa-del').onclick=()=>{if(confirm('¿Eliminar la factura '+d.factura+' del sistema? Los tanqueos no se tocan.')){const del=new Set(d.lines.concat(d.nc||[]).map(l=>l.id));S.facturas=S.facturas.filter(x=>!del.has(x.id));save();$('#dlg-fac').close();renderAll()}};
  $('#dfa-save').onclick=()=>{const c=DF.c,txt=$('#dfa-com').value.trim(),rfp=num($('#dfa-rfp').value);
   if($('#dfa-rf').checked&&(rfp==null||rfp<0))return toast('Indique la tarifa de retención');
@@ -1964,6 +1976,7 @@ function initExtra(){
  $('#fd-mes').onchange=renderDocs;$('#pc-mes').onchange=renderPreComp;$('#pc-placa').onchange=renderPreComp;
  $('#f-pre').onsubmit=guardarPre;$('#pr-imp').onclick=()=>$('#pr-file').click();$('#pr-file').onchange=e=>{const f=e.target.files[0];if(f)impPre(f);e.target.value=''};
  $('#fa-btn').onclick=()=>$('#fa-file').click();$('#fa-file').onchange=e=>{if(e.target.files.length)cargarFacturas([...e.target.files]);e.target.value=''};
+ $('#fa-nc-btn').onclick=()=>$('#fa-nc-file').click();$('#fa-nc-file').onchange=e=>{if(e.target.files.length)cargarFacturas([...e.target.files],true);e.target.value=''};
  $('#fa-est').onchange=renderFacturas;$('#fd-est').onchange=renderDocs;$('#fm-ok').onclick=guardarFacManual;
  $('#fa-del').onclick=()=>{if(S.facturas.length&&confirm('¿Eliminar todas las facturas cargadas? Los tanqueos no se tocan.')){S.facturas=[];save();renderAll()}};
  $('#g-dim').onchange=renderGerencial;
@@ -2226,6 +2239,76 @@ function satLiveWire(){
   $('#sat-live-limpiar').onclick=()=>{$('#sat-live-results').innerHTML='';$('#sat-live-status').innerHTML=''};
 }
 
+/* ===================== Estadísticas Satrack en PDF por intervalo entre tanqueos ===================== */
+let SP=[];
+function spIntervalos(pl){if(!pl)return[];return analizarPlaca(pl).per.map(p=>({key:p.A.id+'>'+p.B.id,t0:dtT(p.A),t1:dtT(p.B),txt:fd(p.A.fecha)+' '+(p.A.hora||'')+' → '+fd(p.B.fecha)+' '+(p.B.hora||'')+' · '+fmt(p.kmOdo)+' km odómetro'+(p.kmSat!=null?' · Satrack '+fmt(p.kmSat)+' km':'')}))}
+function spHoras(s,linea){
+  if(/:/.test(s))return parseHoras(s);
+  if(/h/.test(s)){const m=s.match(/(\d+)\s*h\w*(?:\s*(\d+)\s*m)?/);return m?(+m[1])+(+(m[2]||0))/60:null}
+  const n=parseKm(s);if(n==null)return null;
+  return(/min/.test(linea)&&!/hora|\bhh\b/.test(linea))?n/60:n;
+}
+function spLeer(L){
+  const T=L.map(r=>Array.isArray(r)?r.join(' '):String(r)),N=T.map(norm),all=N.join('\n'),res={km:null,ral:null,t0:null,t1:null};
+  const pk=[/(?:km|kilometros)\s+recorridos?[^0-9\n]{0,30}(\d[\d.,]*)/,/distancia\s+(?:total\s+)?(?:recorrida)?[^0-9\n]{0,30}(\d[\d.,]*)/,/(?:total\s+)?recorrido(?:\s+total)?[^0-9\n]{0,30}(\d[\d.,]*)/,/kilometraje[^0-9\n]{0,30}(\d[\d.,]*)/,/(?:distancia|recorrido)[^0-9\n]{0,40}(\d[\d.,]*)/];
+  for(const re of pk){for(const l of N){const m=l.match(re);if(m){const v=parseKm(m[1]);if(v!=null&&v>=0){res.km=v;break}}}if(res.km!=null)break}
+  for(const l of N){const m=l.match(/ralenti[^0-9\n]{0,30}(\d{1,4}:\d{2}(?::\d{2})?|\d+\s*h\w*(?:\s*\d+\s*m\w*)?|\d[\d.,]*)/);if(m){const v=spHoras(m[1],l);if(v!=null){res.ral=v;break}}}
+  const ds=[],re=/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})|(\d{4})-(\d{2})-(\d{2})/g;let m;
+  while((m=re.exec(all))){const y=m[3]?+m[3]:+m[4],mo=m[3]?+m[2]:+m[5],d=m[3]?+m[1]:+m[6];if(mo>=1&&mo<=12&&d>=1&&d<=31&&y>2000)ds.push(new Date(y,mo-1,d).getTime())}
+  if(ds.length){res.t0=Math.min(...ds);res.t1=Math.max(...ds)+DIA-60000}
+  return res}
+async function satPdfAbrir(files){
+  const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))];
+  toast('Leyendo PDF…');
+  for(const file of files){
+    if(!/\.pdf$/i.test(file.name))continue;
+    let L=[],aviso='';
+    try{if(typeof pdfjsLib==='undefined')throw new Error('sin pdf.js');L=await pdfRows(file)}catch(e){aviso='No se pudo leer el texto del PDF (escaneo o sin conexión a la librería): digite los datos.'}
+    const txt=L.map(x=>x.join(' ')).join('\n'),r={id:uid(),file,nombre:file.name,placa:'',key:'',km:null,ral:null,mt0:'',mt1:'',aviso,txt:txt.slice(0,4000)};
+    if(L.length){const x=spLeer(L);r.km=x.km;r.ral=x.ral;const tx=normPlaca(txt);r.placa=pls.find(p=>tx.includes(p))||'';
+      if(r.placa&&x.t0!=null){let best=null,sc=Infinity;spIntervalos(r.placa).forEach(iv=>{const s=Math.abs(iv.t0-x.t0)+Math.abs(iv.t1-x.t1);if(s<sc){sc=s;best=iv}});if(best&&sc<=3*DIA)r.key=best.key}}
+    SP.push(r)}
+  spRender()}
+function spRender(){
+  const o=$('#sp-out');if(!SP.length){o.innerHTML='';return}
+  const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].sort();
+  o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Intervalo entre tanqueos</th><th class="n">Km recorridos *</th><th class="n">Ralentí (h)</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
+    return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':r.km!=null?'good':'muted'}">${r.aviso?esc(r.aviso):(r.km!=null?'Km leídos del PDF: verifíquelos':'No se detectaron km: digítelos')}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
+    <td><select data-sp="placa" data-i="${i}"><option value="">—</option>${pls.map(p=>`<option ${p===r.placa?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
+    <td><select data-sp="key" data-i="${i}"><option value="">— Seleccione —</option>${iv.map(x=>`<option value="${esc(x.key)}" ${x.key===r.key?'selected':''}>${esc(x.txt)}</option>`).join('')}<option value="__m" ${r.key==='__m'?'selected':''}>Otro intervalo (manual)</option></select>${r.key==='__m'?`<div class="row" style="margin-top:6px"><input type="datetime-local" data-sp="mt0" data-i="${i}" value="${esc(r.mt0)}"><input type="datetime-local" data-sp="mt1" data-i="${i}" value="${esc(r.mt1)}"></div>`:''}</td>
+    <td class="n"><input type="number" min="0" step="0.1" data-sp="km" data-i="${i}" value="${r.km==null?'':r.km}" style="width:110px"></td>
+    <td class="n"><input type="number" min="0" step="0.1" data-sp="ral" data-i="${i}" value="${r.ral==null?'':+r.ral.toFixed(2)}" style="width:90px"></td>
+    <td><button class="btn sec sm" type="button" data-spx="${i}">Quitar</button></td></tr>`}).join('')+'</table></div><div class="row" style="margin-top:10px"><button class="btn" type="button" id="sp-ok">Guardar estadísticas</button><button class="btn sec" type="button" id="sp-cancel">Cancelar</button></div><p class="muted small">Si el vehículo no muestra intervalos, necesita al menos dos tanqueos full registrados; también puede usar «Otro intervalo (manual)».</p>';
+  $$('#sp-out [data-sp]').forEach(e=>e.onchange=()=>{const r=SP[+e.dataset.i],k=e.dataset.sp;
+    if(k==='placa'){r.placa=e.value;r.key='';spRender();return}
+    if(k==='key'){r.key=e.value;spRender();return}
+    if(k==='km')r.km=num(e.value);else if(k==='ral')r.ral=num(e.value);else r[k]=e.value});
+  $$('#sp-out [data-spx]').forEach(b=>b.onclick=()=>{SP.splice(+b.dataset.spx,1);spRender()});
+  $('#sp-cancel').onclick=()=>{SP=[];spRender()};$('#sp-ok').onclick=spGuardar}
+async function spGuardar(){
+  const listo=[];
+  for(const r of SP){
+    if(!r.placa||!r.key||r.km==null||r.km<0)return toast('Complete vehículo, intervalo y km en «'+r.nombre+'»');
+    let t0,t1,txt;
+    if(r.key==='__m'){t0=r.mt0?new Date(r.mt0).getTime():NaN;t1=r.mt1?new Date(r.mt1).getTime():NaN;if(isNaN(t0)||isNaN(t1)||t1<=t0)return toast('Indique un intervalo manual válido en «'+r.nombre+'»');txt=fT(t0)+' → '+fT(t1)}
+    else{const iv=spIntervalos(r.placa).find(x=>x.key===r.key);if(!iv)return toast('El intervalo elegido en «'+r.nombre+'» ya no existe');t0=iv.t0;t1=iv.t1;txt=iv.txt}
+    listo.push({r,t0,t1,txt})}
+  const dentro=(l,s)=>s.placa===l.r.placa&&satMid(s)>l.t0&&satMid(s)<=l.t1,choques=listo.reduce((n,l)=>n+S.satrack.filter(s=>dentro(l,s)).length,0);
+  if(choques&&!confirm('En los intervalos elegidos ya hay '+choques+' registro(s) de Satrack (informe o API). Se reemplazarán por los km de los PDF para no duplicar. ¿Continuar?'))return;
+  for(const l of listo){
+    S.satrack=S.satrack.filter(s=>!dentro(l,s));
+    const lote=uid();
+    S.satLotes.push({id:lote,archivo:l.r.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:l.r.placa+' · '+l.txt});
+    S.satrack.push({id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:l.r.km,ralentiH:l.r.ral,lote});
+    try{await fPut('satpdf:'+lote,l.r.file)}catch(e){}
+    subirArchivoSat(lote,l.r.file)}
+  SP=[];save();renderAll();spRender();toast(listo.length+' estadística(s) de Satrack guardada(s) y asignada(s) a su intervalo')}
+async function spVer(id){
+  let f=null;try{f=await fGet('satpdf:'+id)}catch(e){}
+  if(f){const u=URL.createObjectURL(f);window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),60000)}
+  else{const l=S.satLotes.find(x=>x.id===id);if(l&&l.url)window.open(l.url,'_blank');else toast('El PDF no está disponible en este navegador (se adjuntó en otro equipo o sin conexión a Drive)')}}
+function satPdfWire(){$('#sp-btn').onclick=()=>$('#sp-file').click();$('#sp-file').onchange=e=>{if(e.target.files.length)satPdfAbrir([...e.target.files]);e.target.value=''}}
+
 /* ===================== Arranque ===================== */
 function goTab(t){$$('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));$$('section').forEach(s=>s.classList.toggle('on',s.id==='tab-'+t));if(t==='gerencial')renderGerencial();if(t==='config'&&typeof satCfgLoad==='function')satCfgLoad()}
 function renderAll(){
@@ -2252,7 +2335,7 @@ $('#sat-placa').onchange=renderSatrack;
 $('#m-mes').onchange=renderMensual;$('#m-vista').onchange=renderMensual;
 $('#g-mes').onchange=renderGerencial;$('#g-placa').onchange=renderGerencial;
 $$('.sel-base').forEach(s=>s.onchange=()=>{S.config.baseKm=s.value;save();renderAll()});
-bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();satLiveWire();
+bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();satLiveWire();satPdfWire();
 </script>
 </body>
 </html>
