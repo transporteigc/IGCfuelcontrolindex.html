@@ -270,7 +270,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
 <section id="tab-facturas">
   <div class="card">
     <h2>Conciliación de tanqueos con facturas electrónicas de combustible</h2>
-    <p class="muted small" style="margin-top:0">Suba las facturas del proveedor: XML (factura electrónica DIAN o AttachedDocument), ZIP con XML, o Excel/CSV con columnas Factura, Fecha, Galones, Valor (Placa, Desde y Hasta son opcionales). Una factura puede cubrir varios tanqueos de varios vehículos en un intervalo de días: en la tabla <b>Conciliación por factura</b> use <b>Conciliar</b> para asociarle los tanqueos ya registrados, ver las diferencias, comentarlas y aplicar la retención en la fuente. Las facturas que traen placa y que usted no asocia manualmente se cruzan solas, línea a línea, en la segunda tabla.</p>
+    <p class="muted small" style="margin-top:0">Suba las facturas del proveedor: XML (factura electrónica DIAN o AttachedDocument), ZIP con XML, o Excel/CSV con columnas Factura, Fecha, Galones, Valor (Placa, Desde y Hasta son opcionales). <b>Notas crédito:</b> súbalas por el mismo botón (XML <i>CreditNote</i> o ZIP); se asocian a la factura que afectan y se descuentan de sus galones y valor (la factura queda en neto). En Excel/CSV agregue la columna <b>Tipo</b> («Nota crédito») y <b>Factura afectada</b>. Una factura puede cubrir varios tanqueos de varios vehículos en un intervalo de días: en la tabla <b>Conciliación por factura</b> use <b>Conciliar</b> para asociarle los tanqueos ya registrados, ver las diferencias, comentarlas y aplicar la retención en la fuente. Las facturas que traen placa y que usted no asocia manualmente se cruzan solas, línea a línea, en la segunda tabla.</p>
     <div class="row"><button class="btn" id="fa-btn" type="button">Subir facturas</button><input type="file" id="fa-file" multiple accept=".xml,.zip,.csv,.txt,.xlsx,.xls" hidden>
       <div style="min-width:190px"><label>Mostrar</label><select id="fa-est"><option value="">Todo</option><option value="ok">Conciliado</option><option value="warn">Con diferencia</option><option value="crit">Sin cruce</option></select></div>
       <button class="btn dng sm" id="fa-del" type="button">Eliminar facturas cargadas</button></div>
@@ -284,6 +284,8 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
         <div><label>Período facturado hasta</label><input type="date" id="fm-fin"></div>
         <div><label>Galones facturados *</label><input type="number" id="fm-gal" min="0" step="0.01"></div>
         <div><label>Valor de la factura ($) *</label><input type="number" id="fm-val" min="0" step="1"></div>
+        <div class="chk"><input type="checkbox" id="fm-nc"><label for="fm-nc">Es una nota crédito (descuenta de la factura)</label></div>
+        <div><label>Factura afectada (solo nota crédito)</label><input id="fm-ref" placeholder="N.º de la factura a la que aplica"></div>
       </div>
       <div class="row" style="margin-top:10px"><button class="btn" id="fm-ok" type="button">Guardar factura</button></div>
     </details>
@@ -1582,19 +1584,23 @@ async function impPre(file){let rows;try{rows=await leerTabla(file)}catch(e){ret
 function parseFacturaXML(txt,arch){
  const P=t=>new DOMParser().parseFromString(t,'application/xml'),ch=(n,t)=>{const e=[...n.children].find(x=>x.localName===t);return e?e.textContent.trim():''},ds=(n,t)=>n.getElementsByTagNameNS('*',t);
  let d=P(txt);
- if(d.documentElement.localName==='AttachedDocument'){let inner=null;for(const e of ds(d,'Description')){if(/<(\w+:)?Invoice[\s>]/.test(e.textContent)){inner=e.textContent;break}}if(!inner)return[];d=P(inner)}
- const r=d.documentElement;if(r.localName!=='Invoice')return[];
+ if(d.documentElement.localName==='AttachedDocument'){let inner=null;for(const e of ds(d,'Description')){if(/<(\w+:)?(Invoice|CreditNote)[\s>]/.test(e.textContent)){inner=e.textContent;break}}if(!inner)return[];d=P(inner)}
+ const r=d.documentElement;if(r.localName!=='Invoice'&&r.localName!=='CreditNote')return[];
+ const esNC=r.localName==='CreditNote',sg_=esNC?-1:1;
+ const br=ds(r,'BillingReference')[0],refFac=br?((ds(br,'ID')[0]||{}).textContent||'').trim():'';
  const fac=ch(r,'ID'),fecha=ch(r,'IssueDate'),hora=ch(r,'IssueTime').slice(0,5),sup=ds(r,'AccountingSupplierParty')[0],prov=sup&&ds(sup,'RegistrationName')[0],nit=sup&&ds(sup,'CompanyID')[0];
  const notas=[...r.children].filter(x=>x.localName==='Note').map(x=>x.textContent).join(' '),ip=ds(r,'InvoicePeriod')[0],pIni=ip?ch(ip,'StartDate'):'',pFin=ip?ch(ip,'EndDate'):'';
- return[...ds(r,'InvoiceLine')].map(l=>{const q=ds(l,'InvoicedQuantity')[0],cant=parseFloat(q&&q.textContent),u=(q&&q.getAttribute('unitCode'))||'';
+ return[...ds(r,esNC?'CreditNoteLine':'InvoiceLine')].map(l=>{const q=ds(l,esNC?'CreditedQuantity':'InvoicedQuantity')[0],cant=parseFloat(q&&q.textContent),u=(q&&q.getAttribute('unitCode'))||'';
   const gal=u==='LTR'?cant/3.785411784:cant,val=parseFloat(ch(l,'LineExtensionAmount')),desc=((ds(l,'Description')[0]||{}).textContent||'').trim(),m=(desc+' '+notas).toUpperCase().match(/\b([A-Z]{3})[\s\-]?(\d{3})\b/);
-  return{factura:fac,fecha,hora,proveedor:prov?prov.textContent.trim():'',nit:nit?nit.textContent.trim():'',placa:m?m[1]+m[2]:'',desc:desc.slice(0,80),gal:isNaN(gal)?null:+gal.toFixed(3),valor:isNaN(val)?null:val,archivo:arch,u,pIni,pFin}})
-  .filter(x=>x.gal>0&&(/GLL|LTR/.test(x.u)||/ACPM|DIESEL|GASOLINA|COMBUSTIBLE/i.test(x.desc)))}
+  return{factura:fac,fecha,hora,proveedor:prov?prov.textContent.trim():'',nit:nit?nit.textContent.trim():'',placa:m?m[1]+m[2]:'',desc:desc.slice(0,80),gal:isNaN(gal)?null:+(gal*sg_).toFixed(3),valor:isNaN(val)?null:val*sg_,archivo:arch,u,pIni,pFin,tipo:esNC?'NC':'FE',ref:esNC?refFac:''}})
+  .filter(x=>x.gal!=null&&Math.abs(x.gal)>0&&(/GLL|LTR/.test(x.u)||/ACPM|DIESEL|GASOLINA|COMBUSTIBLE/i.test(x.desc)))}
 function facDeTabla(rows,arch){
  const hi=rows.findIndex(r=>{const h=r.map(norm);return h.some(x=>/fecha/.test(x))&&h.some(x=>/galon|cantidad/.test(x))});if(hi<0)return[];
- const h=rows[hi].map(norm),f=re=>h.findIndex(x=>re.test(x)),fa0=(...L)=>{for(const re of L){const i=f(re);if(i>=0)return i}return -1},c={n:f(/factura|numero|nro|consecutivo/),f:fa0(/^fecha( de)?( emision| factura| expedicion)?$/,/fecha/),p:f(/placa|vehiculo/),pi:f(/desde|inicio/),pf:f(/hasta|^fin\b|final/),g:f(/galon|cantidad/),v:f(/valor|total|subtotal/),pr:f(/proveedor|estacion|razon/)};
- return rows.slice(hi+1).map(r=>{const d=parseFecha(r[c.f]),gal=parseKm(r[c.g]);if(!d||!(gal>0))return null;
-  return{factura:c.n>=0?String(r[c.n]).trim():'',fecha:d.iso.slice(0,10),hora:d.solo?'':d.iso.slice(11,16),proveedor:c.pr>=0?String(r[c.pr]).trim():'',nit:'',placa:c.p>=0?normPlaca(r[c.p]):'',desc:'',gal,valor:c.v>=0?parseKm(r[c.v]):null,archivo:arch,pIni:c.pi>=0&&parseFecha(r[c.pi])?parseFecha(r[c.pi]).iso.slice(0,10):'',pFin:c.pf>=0&&parseFecha(r[c.pf])?parseFecha(r[c.pf]).iso.slice(0,10):''}}).filter(Boolean)}
+ const h=rows[hi].map(norm),f=re=>h.findIndex(x=>re.test(x)),fa0=(...L)=>{for(const re of L){const i=f(re);if(i>=0)return i}return -1},c={tp:f(/^tipo/),rf:f(/afectada|referencia|factura asociada|factura origen/),n:fa0(/^(n\.?|numero|nro|no\.?)( de)?( factura| documento| nota)?$/,/^factura$/,/numero|nro|consecutivo/),f:fa0(/^fecha( de)?( emision| factura| expedicion)?$/,/fecha/),p:f(/placa|vehiculo/),pi:f(/desde|inicio/),pf:f(/hasta|^fin\b|final/),g:f(/galon|cantidad/),v:f(/valor|total|subtotal/),pr:f(/proveedor|estacion|razon/)};
+ return rows.slice(hi+1).map(r=>{const d=parseFecha(r[c.f]);let gal=parseKm(r[c.g]);if(!d||!gal)return null;
+  const nTxt=c.n>=0?String(r[c.n]).trim():'',esNC=(c.tp>=0&&/nota|^nc|credito/.test(norm(r[c.tp])))||/^nc/i.test(nTxt)||gal<0;
+  let val=c.v>=0?parseKm(r[c.v]):null;if(esNC){gal=-Math.abs(gal);if(val!=null)val=-Math.abs(val)}
+  return{factura:nTxt,tipo:esNC?'NC':'FE',ref:esNC&&c.rf>=0?String(r[c.rf]).trim():'',fecha:d.iso.slice(0,10),hora:d.solo?'':d.iso.slice(11,16),proveedor:c.pr>=0?String(r[c.pr]).trim():'',nit:'',placa:c.p>=0?normPlaca(r[c.p]):'',desc:'',gal,valor:val,archivo:arch,pIni:c.pi>=0&&parseFecha(r[c.pi])?parseFecha(r[c.pi]).iso.slice(0,10):'',pFin:c.pf>=0&&parseFecha(r[c.pf])?parseFecha(r[c.pf]).iso.slice(0,10):''}}).filter(Boolean)}
 async function cargarFacturas(files){let nu=0,dup=0;
  const add=L=>L.forEach(f=>{const k=[f.factura,f.placa,f.fecha,f.gal,f.valor].join('|');if(S.facturas.some(x=>x.k===k)){dup++;return}f.k=k;f.id=uid();S.facturas.push(f);nu++});
  for(const file of files){const ext=file.name.split('.').pop().toLowerCase();
@@ -1606,7 +1612,7 @@ async function cargarFacturas(files){let nu=0,dup=0;
 function conciliarFac(){
  const AS=asociados(),tp=S.config.tolFacPct,td=S.config.tolFacDias,tv=S.config.tolFacValor,usados=new Set(AS.tq),out=[],dd=(a,b)=>Math.abs(Date.parse(a)-Date.parse(b))/DIA;
  [...S.facturas].sort((a,b)=>a.fecha<b.fecha?-1:1).forEach(f=>{
-  if(AS.fl.has(f.id))return;
+  if(AS.fl.has(f.id)||f.tipo==='NC')return;
   const t=S.tanqueos.filter(t=>!usados.has(t.id)&&dd(t.fecha,f.fecha)<=td&&(f.placa?t.placa===f.placa:Math.abs(t.gal-f.gal)/f.gal*100<=Math.max(tp*5,10))).sort((a,b)=>Math.abs(a.gal-f.gal)-Math.abs(b.gal-f.gal))[0];
   if(!t){out.push({f,t:null,n:'crit',e:'FACTURA SIN TANQUEO',obs:''});return}
   usados.add(t.id);
@@ -1628,12 +1634,19 @@ function renderFacturas(){
 /* ---------- Conciliación por factura: asociar tanqueos, diferencias, comentarios y retención en la fuente ---------- */
 const esT=v=>v===true||v==='TRUE'||v==='true';
 const ids0=h=>String(h.tqIds||'').split(',').filter(Boolean);
-function docsFac(){const g=new Map();
- S.facturas.forEach(f=>{const k=(f.factura||'s/n-'+f.id)+'|'+(f.nit||f.proveedor||'');let d=g.get(k);if(!d){d={key:k,head:f,lines:[]};g.set(k,d)}d.lines.push(f)});
- return[...g.values()].map(d=>{const L=d.lines,vs=L.filter(x=>isNum(x.valor));
+function docsFac(){const g=new Map(),byNum=new Map(),ncs=[];
+ S.facturas.filter(f=>f.tipo!=='NC').forEach(f=>{const k=(f.factura||'s/n-'+f.id)+'|'+(f.nit||f.proveedor||'');let d=g.get(k);if(!d){d={key:k,head:f,lines:[],nc:[]};g.set(k,d);if(f.factura)byNum.set(norm(f.factura),d)}d.lines.push(f)});
+ S.facturas.filter(f=>f.tipo==='NC').forEach(f=>{const d=f.ref?byNum.get(norm(f.ref)):null;if(d)d.nc.push(f);else ncs.push(f)});
+ /* NC sin factura afectada cargada: se muestran como documento propio para no perderlas */
+ ncs.forEach(f=>{const k='NC|'+(f.factura||f.id)+'|'+(f.nit||f.proveedor||'');let d=g.get(k);if(!d){d={key:k,head:f,lines:[],nc:[],soloNC:true};g.set(k,d)}d.lines.push(f)});
+ return[...g.values()].map(d=>{const L=d.lines,vs=L.filter(x=>isNum(x.valor)),N=d.nc;
   d.factura=d.head.factura||'(sin número)';d.proveedor=d.head.proveedor||'';
   d.fecha=L.map(x=>x.fecha).filter(Boolean).sort()[0]||'';
-  d.gal=L.reduce((s,x)=>s+(+x.gal||0),0);d.valor=vs.length?vs.reduce((s,x)=>s+Number(x.valor),0):null;return d})}
+  d.galBruto=L.reduce((s,x)=>s+(+x.gal||0),0);d.valorBruto=vs.length?vs.reduce((s,x)=>s+Number(x.valor),0):null;
+  d.ncGal=N.reduce((s,x)=>s+(+x.gal||0),0);d.ncVal=N.reduce((s,x)=>s+(isNum(x.valor)?Number(x.valor):0),0);
+  d.ncDocs=[...new Set(N.map(x=>x.factura).filter(Boolean))];
+  /* gal y valor = netos (factura + notas crédito, que vienen en negativo) */
+  d.gal=d.galBruto+d.ncGal;d.valor=d.valorBruto==null?null:d.valorBruto+d.ncVal;return d})}
 function asociados(){const tq=new Set(),fl=new Set();
  docsFac().forEach(d=>{const a=ids0(d.head);if(a.length){a.forEach(i=>tq.add(i));d.lines.forEach(l=>fl.add(l.id))}});return{tq,fl}}
 function calcDoc(d){const h=d.head,ids=ids0(h),T=ids.map(i=>S.tanqueos.find(t=>t.id===i)).filter(Boolean);
@@ -1655,15 +1668,16 @@ function renderDocs(){const host=$('#fd-tbl');if(!host)return;
   +kp('Conciliadas / subsanadas',A.filter(r=>r.c.n==='ok').length)+kp('Con diferencia pendiente',A.filter(r=>r.c.e==='CON DIFERENCIA').length)+kp('Sin asociar',A.filter(r=>r.c.e==='SIN ASOCIAR').length)
   +kp('Valor total facturas',money(sum(A,r=>r.d.valor)),mes?mesTxt(mes):'todos los meses')+kp('Retención en la fuente',money(sum(A,r=>r.c.ret)),'sobre '+A.filter(r=>r.c.rfOn).length+' factura(s)')+kp('Neto a pagar',money(sum(A,r=>r.c.neto)),'valor − retención');
  host.innerHTML=V.length?'<tr><th>Estado</th><th>Factura</th><th>Fecha</th><th class="n">Gal. factura</th><th class="n">Valor factura</th><th class="n">Tanqueos</th><th class="n">Gal. tanqueos</th><th class="n">Dif. gal</th><th class="n">Dif. %</th><th class="n">Dif. valor</th><th class="n">Retención</th><th class="n">Neto a pagar</th><th>Comentarios</th><th></th></tr>'
-  +V.map(({d,c})=>`<tr><td>${chip(c.n,c.e)}</td><td><b>${esc(d.factura)}</b><div class="small muted">${esc(d.proveedor)}</div></td><td>${d.fecha?fd(d.fecha):'—'}${d.head.pIni?`<div class="small muted">${fd(d.head.pIni)} a ${fd(d.head.pFin||d.head.pIni)}</div>`:''}</td><td class="n">${fmt(d.gal,2)}</td><td class="n">${money(d.valor)}</td><td class="n">${c.T.length||'—'}</td><td class="n">${c.T.length?fmt(c.tg,2):'—'}</td><td class="n">${c.dg==null?'—':sgal(c.dg,2)}</td><td class="n">${c.pg==null?'—':sg(c.pg)}</td><td class="n">${c.dv==null?'—':money(c.dv)}</td><td class="n">${c.rfOn?money(c.ret)+'<div class="small muted">'+fmt(c.pct,2)+' %</div>':'—'}</td><td class="n">${money(c.neto)}</td><td class="small">${nCom(d.head)?'💬 '+nCom(d.head):'—'}</td><td class="n"><button class="btn sm" data-cf="${d.head.id}">Conciliar</button></td></tr>`).join('')+totRowFac(V)
+  +V.map(({d,c})=>`<tr><td>${chip(c.n,c.e)}</td><td><b>${esc(d.factura)}</b>${d.soloNC?' <span class="chip na">NC</span>':''}<div class="small muted">${esc(d.proveedor)}</div>${d.nc.length?'<div class="small" style="color:var(--warn)">NC '+esc(d.ncDocs.join(', ')||d.nc.length+' línea(s)')+': '+sgal(d.ncGal,2)+' · '+money(d.ncVal)+'</div>':''}</td><td>${d.fecha?fd(d.fecha):'—'}${d.head.pIni?`<div class="small muted">${fd(d.head.pIni)} a ${fd(d.head.pFin||d.head.pIni)}</div>`:''}</td><td class="n">${fmt(d.gal,2)}</td><td class="n">${money(d.valor)}</td><td class="n">${c.T.length||'—'}</td><td class="n">${c.T.length?fmt(c.tg,2):'—'}</td><td class="n">${c.dg==null?'—':sgal(c.dg,2)}</td><td class="n">${c.pg==null?'—':sg(c.pg)}</td><td class="n">${c.dv==null?'—':money(c.dv)}</td><td class="n">${c.rfOn?money(c.ret)+'<div class="small muted">'+fmt(c.pct,2)+' %</div>':'—'}</td><td class="n">${money(c.neto)}</td><td class="small">${nCom(d.head)?'💬 '+nCom(d.head):'—'}</td><td class="n"><button class="btn sm" data-cf="${d.head.id}">Conciliar</button></td></tr>`).join('')+totRowFac(V)
   :'<tr><td class="muted">Suba las facturas del proveedor o regístrelas manualmente para asociarles los tanqueos.</td></tr>';
  $$('#fd-tbl [data-cf]').forEach(b=>b.onclick=()=>abrirDocFac(b.dataset.cf))}
 
 function guardarFacManual(){const g=i=>$(i).value.trim(),num_=g('#fm-num'),fecha=g('#fm-fecha'),gal=num($('#fm-gal').value),val=num($('#fm-val').value);
  if(!num_||!fecha||!(gal>0)||val==null)return toast('Complete N.º de factura, fecha, galones y valor');
- const f={id:uid(),factura:num_,fecha,hora:'',proveedor:g('#fm-prov'),nit:g('#fm-nit'),placa:'',desc:'Registro manual',gal,valor:val,archivo:'manual',pIni:g('#fm-ini'),pFin:g('#fm-fin')};
+ const nc=$('#fm-nc').checked,f={id:uid(),factura:num_,fecha,hora:'',proveedor:g('#fm-prov'),nit:g('#fm-nit'),placa:'',desc:nc?'Nota crédito (manual)':'Registro manual',gal:nc?-Math.abs(gal):gal,valor:nc?-Math.abs(val):val,archivo:'manual',pIni:g('#fm-ini'),pFin:g('#fm-fin'),tipo:nc?'NC':'FE',ref:nc?g('#fm-ref'):''};
+ if(nc&&!f.ref)return toast('Indique la factura afectada por la nota crédito');
  f.k=[f.factura,f.placa,f.fecha,f.gal,f.valor].join('|');if(S.facturas.some(x=>x.k===f.k))return toast('Esa factura ya está registrada');
- S.facturas.push(f);['#fm-num','#fm-prov','#fm-nit','#fm-fecha','#fm-ini','#fm-fin','#fm-gal','#fm-val'].forEach(i=>$(i).value='');save();renderAll();toast('Factura registrada: ya puede asociarle tanqueos')}
+ S.facturas.push(f);['#fm-num','#fm-prov','#fm-nit','#fm-fecha','#fm-ini','#fm-fin','#fm-gal','#fm-val','#fm-ref'].forEach(i=>$(i).value='');$('#fm-nc').checked=false;save();renderAll();toast('Factura registrada: ya puede asociarle tanqueos')}
 
 /* subconjunto de tanqueos cuya suma de galones se acerca más a los de la factura */
 function sugerirTq(items,target){const W=items.map(t=>Math.round(t.gal*10)),T=Math.round(target*10),cap=T+Math.max(0,...W);
@@ -1681,7 +1695,7 @@ function abrirDocFac(id){const d=docsFac().find(x=>x.head.id===id);if(!d)return;
  const pl=[...new Set(S.tanqueos.map(t=>t.placa))].sort(),c0=calcDoc(d),kp=(t,v)=>`<div class="kpi"><span>${t}</span><b>${v}</b></div>`;
  $('#dlg-fac-body').innerHTML=`<h2 style="margin:0">Conciliar factura ${esc(d.factura)}</h2>
  <div class="small muted">${esc(d.proveedor)}${d.head.nit?' · NIT '+esc(d.head.nit):''} · emitida ${d.fecha?fd(d.fecha):'—'} · ${d.lines.length} línea(s)</div>
- <div class="kpis">${kp('Galones facturados',fmt(d.gal,2))}${kp('Valor factura',money(d.valor))}${kp('Precio implícito',d.valor&&d.gal?money(d.valor/d.gal)+' / gal':'—')}</div>
+ <div class="kpis">${d.nc.length?kp('Galones factura (bruto)',fmt(d.galBruto,2))+kp('Valor factura (bruto)',money(d.valorBruto))+kp('Notas crédito'+(d.ncDocs.length?' ('+esc(d.ncDocs.join(', '))+')':''),sgal(d.ncGal,2)+' · '+money(d.ncVal)):''}${kp('Galones facturados'+(d.nc.length?' (neto)':''),fmt(d.gal,2))}${kp('Valor factura'+(d.nc.length?' (neto)':''),money(d.valor))}${kp('Precio implícito',d.valor&&d.gal?money(d.valor/d.gal)+' / gal':'—')}</div>
  <h3>1 · Tanqueos que cubre la factura</h3>
  <div class="grid"><div><label>Tanqueos desde</label><input type="date" id="dfa-ini" value="${ini}"></div><div><label>Tanqueos hasta</label><input type="date" id="dfa-fin" value="${fin}"></div>
  <div><label>Vehículo</label><select id="dfa-pl"><option value="">Todos</option>${pl.map(p=>`<option>${esc(p)}</option>`).join('')}</select></div></div>
@@ -1719,7 +1733,7 @@ function abrirDocFac(id){const d=docsFac().find(x=>x.head.id===id);if(!d)return;
  $('#dfa-all').onclick=()=>{DF.vis.forEach(t=>DF.ids.add(t.id));lista()};$('#dfa-none').onclick=()=>{DF.ids.clear();lista()};
  $('#dfa-sug').onclick=()=>{const r=sugerirTq(DF.vis,d.gal);if(!r.length)return toast('No hay tanqueos disponibles en el período');DF.ids=new Set(r);lista();toast('Selección sugerida: revise que corresponda a la factura')};
  $('#dfa-x').onclick=()=>$('#dlg-fac').close();
- $('#dfa-del').onclick=()=>{if(confirm('¿Eliminar la factura '+d.factura+' del sistema? Los tanqueos no se tocan.')){const del=new Set(d.lines.map(l=>l.id));S.facturas=S.facturas.filter(x=>!del.has(x.id));save();$('#dlg-fac').close();renderAll()}};
+ $('#dfa-del').onclick=()=>{if(confirm('¿Eliminar la factura '+d.factura+' del sistema? Los tanqueos no se tocan.')){const del=new Set(d.lines.concat(d.nc||[]).map(l=>l.id));S.facturas=S.facturas.filter(x=>!del.has(x.id));save();$('#dlg-fac').close();renderAll()}};
  $('#dfa-save').onclick=()=>{const c=DF.c,txt=$('#dfa-com').value.trim(),rfp=num($('#dfa-rfp').value);
   if($('#dfa-rf').checked&&(rfp==null||rfp<0))return toast('Indique la tarifa de retención');
   if($('#dfa-ok').checked&&c.dif&&!txt&&!h.coment)return toast('Agregue un comentario que explique cómo se subsanó la diferencia');
@@ -1968,6 +1982,8 @@ function initExtra(){
 let satSyncing=false,satCancel=false;
 function satErrInfo(e){
   const r=(e&&e.extra&&e.extra.resp)||{};let code=r.code||'',msg=(e&&e.message)||String(e);
+  if(/solo conecta con satrack|genera el diagn[oó]stico/i.test(msg))
+    return{code:'LEGADO',msg:'El Apps Script publicado es una versión antigua que no incluye las acciones de Satrack ni la sincronización con Sheets (el aviso viene del servidor de Google, no de esta página). Solución: en el editor de Apps Script reemplace el contenido de Code.gs por la versión completa, agregue Satrack.gs, y luego Implementar → Administrar implementaciones → ✏ → Versión: «Nueva versión» → Implementar. La URL /exec no cambia.'};
   if(!code&&/no est[aá] configurado/i.test(msg))
     return{code:'LEGADO',msg:'Su Apps Script sigue respondiendo con el código anterior. Agregue Satrack.gs al proyecto, enlace la acción «satrack» de doPost a satrackRoute_(req) y publique una Nueva versión de la implementación.'};
   if(!code&&/acci[oó]n no soportada/i.test(msg))
