@@ -155,6 +155,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
         <div><label>Conductor *</label><input id="t-conductor" list="dl-cond" required></div>
         <div><label>Lectura del odómetro (km) *</label><input type="number" id="t-odo" min="0" step="1" required></div>
         <div><label>Galones tanqueados *</label><input type="number" id="t-gal" min="0" step="any" required></div>
+        <div><label>N.º de tirilla (remisión)</label><input id="t-tirilla" maxlength="40" placeholder="Número de la tirilla del tanqueo" autocomplete="off"></div>
         <div><label>Precio por galón (COP)</label><input type="number" id="t-precio" min="0" step="1"><div id="t-total" class="small muted"></div></div>
         <div><label>Km Satrack del intervalo (opcional)</label><input type="number" id="t-sat" min="0" step="1" placeholder="desde el tanqueo anterior"></div>
         <div><label>Horas de ralentí del intervalo (opcional)</label><input type="number" id="t-ralenti" min="0" step="0.1"></div>
@@ -994,9 +995,9 @@ function renderListas(){
 function renderTanqueos(){
   renderListas();
   const all=analisisTodo(),rs=[...S.tanqueos].sort((a,b)=>dtT(b)-dtT(a));
-  $('#tbl-tanqueos').innerHTML=rs.length?`<tr><th>Fecha / hora</th><th>Vehículo</th><th>Conductor</th><th class="n">Odómetro</th><th class="n">Galones</th><th class="n">Precio/gal</th><th class="n">Total</th><th>Full</th><th class="n">Satrack (int.)</th><th class="n">Ralentí h</th><th>Fotos</th><th>Alertas</th><th></th></tr>`+
+  $('#tbl-tanqueos').innerHTML=rs.length?`<tr><th>Fecha / hora</th><th>Vehículo</th><th>Conductor</th><th class="n">Odómetro</th><th class="n">Galones</th><th>N.º tirilla</th><th class="n">Precio/gal</th><th class="n">Total</th><th>Full</th><th class="n">Satrack (int.)</th><th class="n">Ralentí h</th><th>Fotos</th><th>Alertas</th><th></th></tr>`+
   rs.map(r=>{const fl=(all[r.placa]&&all[r.placa].flags[r.id])||[];
-    return `<tr><td>${fd(r.fecha)} ${esc(r.hora||'')}</td><td><b>${esc(r.placa)}</b></td><td>${esc(r.conductor)}</td><td class="n">${fmt(r.odo)}</td><td class="n">${fmtG(r.gal)}</td><td class="n">${isNum(r.precio)?money(r.precio):'—'}</td><td class="n">${isNum(r.precio)?money(r.gal*r.precio):'—'}</td><td>${r.full?'Sí':'No'}</td><td class="n">${fmt(num(r.satKm))}</td><td class="n">${fmt(num(r.ralentiH),1)}</td>
+    return `<tr><td>${fd(r.fecha)} ${esc(r.hora||'')}</td><td><b>${esc(r.placa)}</b></td><td>${esc(r.conductor)}</td><td class="n">${fmt(r.odo)}</td><td class="n">${fmtG(r.gal)}</td><td>${r.tirilla?esc(r.tirilla):'<span class="muted">—</span>'}</td><td class="n">${isNum(r.precio)?money(r.precio):'—'}</td><td class="n">${isNum(r.precio)?money(r.gal*r.precio):'—'}</td><td>${r.full?'Sí':'No'}</td><td class="n">${fmt(num(r.satKm))}</td><td class="n">${fmt(num(r.ralentiH),1)}</td>
     <td>${nFoto(r.fotoOdo)?`<button class="btn sec sm" data-foto="${r.id}:odo">Odómetro${nFoto(r.fotoOdo)>1?' ('+nFoto(r.fotoOdo)+')':''}</button>`:''} ${nFoto(r.fotoComp)?`<button class="btn sec sm" data-foto="${r.id}:comp">Comprobante${nFoto(r.fotoComp)>1?' ('+nFoto(r.fotoComp)+')':''}</button>`:''}</td>
     <td>${fl.map(x=>chip(x.n,x.c)).join('<br>')||'<span class="muted">—</span>'}${r.obs?`<div class="small muted">${esc(r.obs)}</div>`:''}</td>
     <td class="n"><button class="btn sec sm" data-et="${r.id}">Editar</button> <button class="btn sec sm" data-dt="${r.id}">Borrar</button></td></tr>`}).join(''):'';
@@ -1009,7 +1010,7 @@ async function verFoto(k){
   const n=Math.max(1,nFoto(tipo==='odo'?r.fotoOdo:r.fotoComp)),urls=[];
   for(let i=0;i<n;i++){try{const u=await fGet(fk(id,tipo,i));if(u)urls.push(u)}catch(e){}}
   $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tipo==='odo'?'Fotos del odómetro':'Comprobantes de combustible'}${urls.length>1?' ('+urls.length+')':''}</h3>
-    <p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmtG(r.gal)} gal${r.full?' (full)':''} · Conductor ${esc(r.conductor)}</p>
+    <p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmtG(r.gal)} gal${r.full?' (full)':''}${r.tirilla?' · Tirilla <b>'+esc(r.tirilla)+'</b>':''} · Conductor ${esc(r.conductor)}</p>
     ${urls.length?urls.map((u,i)=>`<img src="${u}" alt="Foto ${i+1}" style="margin-bottom:8px">`).join(''):'<p class="muted">La imagen no está disponible en este navegador.</p>'}`;
   $('#dlg').showModal();
 }
@@ -1023,7 +1024,7 @@ function limpiarFormTanqueo(){
 function editarTanqueo(id){
   const r=S.tanqueos.find(x=>x.id===id);if(!r)return;editing=id;pend=nuevoPend();
   $('#t-fecha').value=r.fecha;$('#t-hora').value=r.hora||'';$('#t-placa').value=r.placa;$('#t-conductor').value=r.conductor;
-  $('#t-odo').value=r.odo;$('#t-gal').value=r.gal;$('#t-precio').value=r.precio??'';totalLive();$('#t-full').checked=!!r.full;$('#t-sat').value=r.satKm??'';$('#t-ralenti').value=r.ralentiH??'';$('#t-obs').value=r.obs||'';
+  $('#t-odo').value=r.odo;$('#t-gal').value=r.gal;$('#t-tirilla').value=r.tirilla||'';$('#t-precio').value=r.precio??'';totalLive();$('#t-full').checked=!!r.full;$('#t-sat').value=r.satKm??'';$('#t-ralenti').value=r.ralentiH??'';$('#t-obs').value=r.obs||'';
   fotoRes('odo');fotoRes('comp');
   $('#t-titulo').textContent='Editar tanqueo';$('#t-cancelar').hidden=false;$('#t-guardar').textContent='Guardar cambios';
   liveCheck();window.scrollTo({top:0,behavior:'smooth'});
@@ -1051,7 +1052,7 @@ function liveCheck(){
 async function guardarTanqueo(ev){
   ev.preventDefault();
   const r={id:editing||uid(),fecha:$('#t-fecha').value,hora:$('#t-hora').value,placa:normPlaca($('#t-placa').value),conductor:$('#t-conductor').value.trim(),
-    odo:num($('#t-odo').value),gal:num($('#t-gal').value),precio:num($('#t-precio').value),full:$('#t-full').checked,satKm:num($('#t-sat').value),ralentiH:num($('#t-ralenti').value),obs:$('#t-obs').value.trim()};
+    odo:num($('#t-odo').value),gal:num($('#t-gal').value),tirilla:$('#t-tirilla').value.trim(),precio:num($('#t-precio').value),full:$('#t-full').checked,satKm:num($('#t-sat').value),ralentiH:num($('#t-ralenti').value),obs:$('#t-obs').value.trim()};
   if(!r.placa||r.odo==null||r.gal==null||!r.fecha||!r.hora||!r.conductor){toast('Complete los campos obligatorios');return}
   if($('#t-live').textContent.includes('ERROR DE LECTURA')||$('#t-live').textContent.includes('INCONSISTENTE')){
     if(!confirm('La lectura del odómetro presenta una inconsistencia. El registro se guardará marcado para revisión, sin modificar ni descartar el dato. ¿Continuar?'))return;
@@ -1637,7 +1638,7 @@ function renderFacturas(){
  const R=conciliarFac(),fl=$('#fa-est').value,V=R.filter(r=>!fl||r.n===fl),c=n=>R.filter(r=>r.n===n).length,P=R.filter(r=>r.f&&r.t);
  const kp=(t,v,s)=>`<div class="kpi"><span>${t}</span><b>${v}</b>${s?`<span>${s}</span>`:''}</div>`;
  $('#fa-kpis').innerHTML=kp('Líneas de factura',S.facturas.length,fmt(S.facturas.reduce((s,f)=>s+f.gal,0),1)+' gal facturados')+kp('Conciliadas',R.filter(r=>r.e==='CONCILIADO').length)+kp('Con diferencia',R.filter(r=>r.n==='warn').length,'galones o valor')+kp('Facturas sin tanqueo',R.filter(r=>r.e==='FACTURA SIN TANQUEO').length)+kp('Tanqueos sin factura',R.filter(r=>r.e==='TANQUEO SIN FACTURA').length)+kp('Dif. galones (tanqueo − factura)',sgal(P.reduce((s,r)=>s+r.dg,0)),'en las líneas cruzadas')+kp('Dif. valor (tanqueo − factura)',money(P.reduce((s,r)=>s+(r.dv||0),0)));
- $('#tbl-fac').innerHTML=V.length?'<tr><th>Estado</th><th>Factura</th><th>Fecha</th><th>Placa</th><th class="n">Gal. factura</th><th class="n">Valor factura</th><th>Tanqueo</th><th class="n">Gal. tanqueo</th><th class="n">Dif. gal</th><th class="n">Dif. %</th><th class="n">Dif. valor</th><th>Observaciones</th></tr>'+V.map(r=>{const f=r.f,t=r.t;return`<tr><td>${chip(r.n,r.e)}</td><td>${f?esc(f.factura)+'<div class="small muted">'+esc(f.proveedor)+'</div>':'—'}</td><td>${f?fd(f.fecha):'—'}</td><td><b>${esc(f?f.placa||t&&t.placa||'':t.placa)}</b></td><td class="n">${f?fmt(f.gal,2):'—'}</td><td class="n">${f?money(f.valor):'—'}</td><td>${t?fd(t.fecha)+' '+esc(t.hora||''):'—'}</td><td class="n">${t?fmt(t.gal,2):'—'}</td><td class="n">${r.dg==null?'—':sgal(r.dg,2)}</td><td class="n">${r.pg==null?'—':sg(r.pg)}</td><td class="n">${r.dv==null?'—':money(r.dv)}</td><td class="small">${esc(r.obs||'')}</td></tr>`}).join(''):'<tr><td class="muted">Suba las facturas del proveedor para iniciar la conciliación.</td></tr>'}
+ $('#tbl-fac').innerHTML=V.length?'<tr><th>Estado</th><th>Factura</th><th>Fecha</th><th>Placa</th><th class="n">Gal. factura</th><th class="n">Valor factura</th><th>Tanqueo</th><th class="n">Gal. tanqueo</th><th class="n">Dif. gal</th><th class="n">Dif. %</th><th class="n">Dif. valor</th><th>Observaciones</th></tr>'+V.map(r=>{const f=r.f,t=r.t;return`<tr><td>${chip(r.n,r.e)}</td><td>${f?esc(f.factura)+'<div class="small muted">'+esc(f.proveedor)+'</div>':'—'}</td><td>${f?fd(f.fecha):'—'}</td><td><b>${esc(f?f.placa||t&&t.placa||'':t.placa)}</b></td><td class="n">${f?fmt(f.gal,2):'—'}</td><td class="n">${f?money(f.valor):'—'}</td><td>${t?fd(t.fecha)+' '+esc(t.hora||'')+(t.tirilla?'<div class="small muted">Tirilla '+esc(t.tirilla)+'</div>':''):'—'}</td><td class="n">${t?fmt(t.gal,2):'—'}</td><td class="n">${r.dg==null?'—':sgal(r.dg,2)}</td><td class="n">${r.pg==null?'—':sg(r.pg)}</td><td class="n">${r.dv==null?'—':money(r.dv)}</td><td class="small">${esc(r.obs||'')}</td></tr>`}).join(''):'<tr><td class="muted">Suba las facturas del proveedor para iniciar la conciliación.</td></tr>'}
 
 /* ---------- Conciliación por factura: asociar tanqueos, diferencias, comentarios y retención en la fuente ---------- */
 const esT=v=>v===true||v==='TRUE'||v==='true';
@@ -1949,7 +1950,7 @@ function libro(sec){
   W['Por vehículo']=TT(['Vehículo','Períodos','Km base ('+bn+')','Gal. consumidos','Gal/km','Estándar','Desviación %','Sobreconsumo gal','Sobreconsumo $','Viajes','Gal/viaje','Costo/km'],pls.map(pl=>{const a=agg(per.filter(p=>p.placa===pl),modo);return[pl,a.n,a.km,a.gal,a.galkm,vehiculo(pl).std,a.desv,a.sobreGal,a.sobreCosto,a.nViajes,a.galViaje,a.costoKm]}));
   [['conductor','cond'],['ruta','ruta']].forEach(([n,d])=>W['Por '+n]=TT([n,'Viajes','Km estándar','Gal. atribuidos','Gal. aprox. rutas','Dif. gal','Dif. %','Costo atribuido'],agruparPor(per,d,modo).map(g=>[g.k,g.n,g.km,g.gal,g.galAprox||null,g.galAprox>0?g.gal-g.galAprox:null,g.galAprox>0?(g.gal-g.galAprox)/g.galAprox*100:null,g.galP>0?g.costo:null])));
  }
- if(sec==='tanqueos')W['Tanqueos']=TT(['Fecha','Hora','Placa','Conductor','Odómetro','Galones','Precio/gal','Total','Full','Km Satrack (int.)','Ralentí h','Alertas','Observaciones'],[...S.tanqueos].sort((a,b)=>dtT(a)-dtT(b)).map(r=>{const fl=(A[r.placa]&&A[r.placa].flags[r.id])||[];return[r.fecha,r.hora,r.placa,r.conductor,r.odo,r.gal,r.precio,isNum(r.precio)?r.gal*r.precio:null,r.full?'Sí':'No',num(r.satKm),num(r.ralentiH),fl.map(x=>x.c).join('; '),r.obs]}));
+ if(sec==='tanqueos')W['Tanqueos']=TT(['Fecha','Hora','Placa','Conductor','Odómetro','Galones','N.º tirilla (remisión)','Precio/gal','Total','Full','Km Satrack (int.)','Ralentí h','Alertas','Observaciones'],[...S.tanqueos].sort((a,b)=>dtT(a)-dtT(b)).map(r=>{const fl=(A[r.placa]&&A[r.placa].flags[r.id])||[];return[r.fecha,r.hora,r.placa,r.conductor,r.odo,r.gal,r.tirilla||'',r.precio,isNum(r.precio)?r.gal*r.precio:null,r.full?'Sí':'No',num(r.satKm),num(r.ralentiH),fl.map(x=>x.c).join('; '),r.obs]}));
  if(sec==='viajes'){
   const vs=[...S.viajes].sort((a,b)=>dtV(a)-dtV(b));
   W['Viajes']=TT(['Salida','Placa','Conductor','Ruta','Remisión','N.º viajes','Km estándar','Odómetro ini','Odómetro fin','Km Satrack','Gal. aprox.'],vs.map(v=>[v.salida.replace('T',' '),v.placa,v.conductor,v.ruta,v.remision,nV(v),kmViaje(v),v.odoIni,v.odoFin,v.satKm,galViaje(v)]));
