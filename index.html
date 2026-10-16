@@ -154,7 +154,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
         <div><label>Vehículo (placa) *</label><input id="t-placa" list="dl-placas" placeholder="SZW818" required style="text-transform:uppercase"></div>
         <div><label>Conductor *</label><input id="t-conductor" list="dl-cond" required></div>
         <div><label>Lectura del odómetro (km) *</label><input type="number" id="t-odo" min="0" step="1" required></div>
-        <div><label>Galones tanqueados *</label><input type="number" id="t-gal" min="0" step="0.01" required></div>
+        <div><label>Galones tanqueados *</label><input type="number" id="t-gal" min="0" step="any" required></div>
         <div><label>Precio por galón (COP)</label><input type="number" id="t-precio" min="0" step="1"><div id="t-total" class="small muted"></div></div>
         <div><label>Km Satrack del intervalo (opcional)</label><input type="number" id="t-sat" min="0" step="1" placeholder="desde el tanqueo anterior"></div>
         <div><label>Horas de ralentí del intervalo (opcional)</label><input type="number" id="t-ralenti" min="0" step="0.1"></div>
@@ -535,6 +535,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const isNum=v=>v!==null&&v!==undefined&&v!==''&&!isNaN(Number(v));
 const num=v=>isNum(v)?Number(v):null;
 const fmt=(n,d=0)=>(n==null||isNaN(n))?'—':Number(n).toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtG=n=>(n==null||isNaN(n))?'—':Number(n).toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:6});/* galones tanqueados: mín. 2 decimales, hasta 6 si se digitaron */
 const money=n=>(n==null||isNaN(n))?'—':'$ '+Math.round(n).toLocaleString('es-CO');
 const sg=(x,d=1)=>x==null?'—':(x>0?'+':'')+fmt(x,d)+' %';
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -995,7 +996,7 @@ function renderTanqueos(){
   const all=analisisTodo(),rs=[...S.tanqueos].sort((a,b)=>dtT(b)-dtT(a));
   $('#tbl-tanqueos').innerHTML=rs.length?`<tr><th>Fecha / hora</th><th>Vehículo</th><th>Conductor</th><th class="n">Odómetro</th><th class="n">Galones</th><th class="n">Precio/gal</th><th class="n">Total</th><th>Full</th><th class="n">Satrack (int.)</th><th class="n">Ralentí h</th><th>Fotos</th><th>Alertas</th><th></th></tr>`+
   rs.map(r=>{const fl=(all[r.placa]&&all[r.placa].flags[r.id])||[];
-    return `<tr><td>${fd(r.fecha)} ${esc(r.hora||'')}</td><td><b>${esc(r.placa)}</b></td><td>${esc(r.conductor)}</td><td class="n">${fmt(r.odo)}</td><td class="n">${fmt(r.gal,2)}</td><td class="n">${isNum(r.precio)?money(r.precio):'—'}</td><td class="n">${isNum(r.precio)?money(r.gal*r.precio):'—'}</td><td>${r.full?'Sí':'No'}</td><td class="n">${fmt(num(r.satKm))}</td><td class="n">${fmt(num(r.ralentiH),1)}</td>
+    return `<tr><td>${fd(r.fecha)} ${esc(r.hora||'')}</td><td><b>${esc(r.placa)}</b></td><td>${esc(r.conductor)}</td><td class="n">${fmt(r.odo)}</td><td class="n">${fmtG(r.gal)}</td><td class="n">${isNum(r.precio)?money(r.precio):'—'}</td><td class="n">${isNum(r.precio)?money(r.gal*r.precio):'—'}</td><td>${r.full?'Sí':'No'}</td><td class="n">${fmt(num(r.satKm))}</td><td class="n">${fmt(num(r.ralentiH),1)}</td>
     <td>${nFoto(r.fotoOdo)?`<button class="btn sec sm" data-foto="${r.id}:odo">Odómetro${nFoto(r.fotoOdo)>1?' ('+nFoto(r.fotoOdo)+')':''}</button>`:''} ${nFoto(r.fotoComp)?`<button class="btn sec sm" data-foto="${r.id}:comp">Comprobante${nFoto(r.fotoComp)>1?' ('+nFoto(r.fotoComp)+')':''}</button>`:''}</td>
     <td>${fl.map(x=>chip(x.n,x.c)).join('<br>')||'<span class="muted">—</span>'}${r.obs?`<div class="small muted">${esc(r.obs)}</div>`:''}</td>
     <td class="n"><button class="btn sec sm" data-et="${r.id}">Editar</button> <button class="btn sec sm" data-dt="${r.id}">Borrar</button></td></tr>`}).join(''):'';
@@ -1008,7 +1009,7 @@ async function verFoto(k){
   const n=Math.max(1,nFoto(tipo==='odo'?r.fotoOdo:r.fotoComp)),urls=[];
   for(let i=0;i<n;i++){try{const u=await fGet(fk(id,tipo,i));if(u)urls.push(u)}catch(e){}}
   $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tipo==='odo'?'Fotos del odómetro':'Comprobantes de combustible'}${urls.length>1?' ('+urls.length+')':''}</h3>
-    <p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmt(r.gal,2)} gal${r.full?' (full)':''} · Conductor ${esc(r.conductor)}</p>
+    <p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmtG(r.gal)} gal${r.full?' (full)':''} · Conductor ${esc(r.conductor)}</p>
     ${urls.length?urls.map((u,i)=>`<img src="${u}" alt="Foto ${i+1}" style="margin-bottom:8px">`).join(''):'<p class="muted">La imagen no está disponible en este navegador.</p>'}`;
   $('#dlg').showModal();
 }
