@@ -347,7 +347,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
   </div>
   <div class="card" id="sat-pdf-card">
     <h2>Estadísticas de Satrack por intervalo entre tanqueos (PDF)</h2>
-    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack para el intervalo entre dos tanqueos. El sistema intenta leer del PDF el vehículo, las fechas, los km recorridos y el ralentí; usted confirma o corrige antes de guardar. Si en ese intervalo ya hay registros del informe Excel (o de la API), <b>se dejan tal cual</b> y del PDF solo se toma el <b>ralentí</b> (si vuelve a adjuntar el PDF, solo se actualiza el ralentí). Los km del PDF solo se usan cuando el intervalo no tiene ningún registro de Satrack. El PDF queda adjunto en «Informes cargados».</p>
+    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack para el intervalo entre dos tanqueos. El sistema intenta leer del PDF el vehículo, las fechas y las <b>horas de ralentí</b>; usted confirma o corrige antes de guardar. Del PDF <b>solo se toma el ralentí</b>: los km recorridos salen del informe Excel (o de la API) y no se modifican. El PDF queda adjunto en «Informes cargados».</p>
     <div class="row"><button class="btn" type="button" id="sp-btn">Adjuntar PDF(s) de estadísticas</button><input type="file" id="sp-file" accept=".pdf,application/pdf" multiple hidden></div>
     <div id="sp-out" style="margin-top:12px"></div>
   </div>
@@ -2336,43 +2336,39 @@ async function satPdfAbrir(files){
 function spRender(){
   const o=$('#sp-out');if(!SP.length){o.innerHTML='';return}
   const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].sort();
-  o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Intervalo entre tanqueos</th><th class="n">Km recorridos <span class="small muted">(solo si no hay informe Excel/API en el intervalo)</span></th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
-    return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':r.km!=null?'good':'muted'}">${r.aviso?esc(r.aviso):(r.km!=null?'Km leídos del PDF: verifíquelos':'No se detectaron km: digítelos')}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
+  o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Intervalo entre tanqueos</th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
+    return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':r.ral!=null?'good':'muted'}">${r.aviso?esc(r.aviso):(r.ral!=null?'Ralentí leído del PDF: verifíquelo':'No se detectó el ralentí: digítelo')}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
     <td><select data-sp="placa" data-i="${i}"><option value="">—</option>${pls.map(p=>`<option ${p===r.placa?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
     <td><select data-sp="key" data-i="${i}"><option value="">— Seleccione —</option>${iv.map(x=>`<option value="${esc(x.key)}" ${x.key===r.key?'selected':''}>${esc(x.txt)}</option>`).join('')}<option value="__m" ${r.key==='__m'?'selected':''}>Otro intervalo (manual)</option></select>${r.key==='__m'?`<div class="row" style="margin-top:6px"><input type="datetime-local" data-sp="mt0" data-i="${i}" value="${esc(r.mt0)}"><input type="datetime-local" data-sp="mt1" data-i="${i}" value="${esc(r.mt1)}"></div>`:''}</td>
-    <td class="n"><input type="number" min="0" step="0.1" data-sp="km" data-i="${i}" value="${r.km==null?'':r.km}" style="width:110px"></td>
     <td class="n"><input type="number" min="0" step="0.1" data-sp="ral" data-i="${i}" value="${r.ral==null?'':+r.ral.toFixed(2)}" style="width:90px"></td>
     <td><button class="btn sec sm" type="button" data-spx="${i}">Quitar</button></td></tr>`}).join('')+'</table></div><div class="row" style="margin-top:10px"><button class="btn" type="button" id="sp-ok">Guardar estadísticas</button><button class="btn sec" type="button" id="sp-cancel">Cancelar</button></div><p class="muted small">Si el vehículo no muestra intervalos, necesita al menos dos tanqueos full registrados; también puede usar «Otro intervalo (manual)».</p>';
   $$('#sp-out [data-sp]').forEach(e=>e.onchange=()=>{const r=SP[+e.dataset.i],k=e.dataset.sp;
     if(k==='placa'){r.placa=e.value;r.key='';spRender();return}
     if(k==='key'){r.key=e.value;spRender();return}
-    if(k==='km')r.km=num(e.value);else if(k==='ral')r.ral=num(e.value);else r[k]=e.value});
+    if(k==='ral')r.ral=num(e.value);else r[k]=e.value});
   $$('#sp-out [data-spx]').forEach(b=>b.onclick=()=>{SP.splice(+b.dataset.spx,1);spRender()});
   $('#sp-cancel').onclick=()=>{SP=[];spRender()};$('#sp-ok').onclick=spGuardar}
 async function spGuardar(){
   const listo=[];
   for(const r of SP){
     if(!r.placa||!r.key)return toast('Complete vehículo e intervalo en «'+r.nombre+'»');
+    if(r.ral==null||r.ral<0)return toast('Indique las horas de ralentí de «'+r.nombre+'»');
     let t0,t1,txt;
     if(r.key==='__m'){t0=r.mt0?new Date(r.mt0).getTime():NaN;t1=r.mt1?new Date(r.mt1).getTime():NaN;if(isNaN(t0)||isNaN(t1)||t1<=t0)return toast('Indique un intervalo manual válido en «'+r.nombre+'»');txt=fT(t0)+' → '+fT(t1)}
     else{const iv=spIntervalos(r.placa).find(x=>x.key===r.key);if(!iv)return toast('El intervalo elegido en «'+r.nombre+'» ya no existe');t0=iv.t0;t1=iv.t1;txt=iv.txt}
-    /* registros de Satrack ya cargados (Excel/API/PDF previo con km) en el intervalo: no se tocan */
-    const base=S.satrack.filter(x=>x.placa===r.placa&&satMid(x)>t0&&satMid(x)<=t1&&!x.soloRal);
-    if(base.length){if(r.ral==null||r.ral<0)return toast('Indique el ralentí de «'+r.nombre+'»')}
-    else if(r.km==null||r.km<0)return toast('En «'+r.nombre+'» no hay informe de Satrack en ese intervalo: indique los km recorridos')
-    listo.push({r,t0,t1,txt,soloRal:base.length>0})}
-  let nR=0,nK=0;
+    listo.push({r,t0,t1,txt})}
+  let sinKm=0;
   for(const l of listo){
     const dentro=x=>x.placa===l.r.placa&&satMid(x)>l.t0&&satMid(x)<=l.t1;
-    S.satrack=S.satrack.filter(x=>!(dentro(x)&&(l.soloRal?x.soloRal:true)));
+    if(!S.satrack.some(x=>dentro(x)&&!x.soloRal))sinKm++;
+    S.satrack=S.satrack.filter(x=>!(dentro(x)&&x.soloRal));/* solo se reemplaza un ralentí PDF anterior del mismo intervalo */
     const lote=uid();
-    S.satLotes.push({id:lote,archivo:l.r.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:l.r.placa+' · '+l.txt+(l.soloRal?' · solo ralentí':'')});
-    S.satrack.push(l.soloRal?{id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:0,ralentiH:l.r.ral,lote,soloRal:true}:{id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:l.r.km,ralentiH:l.r.ral,lote});
-    l.soloRal?nR++:nK++;
+    S.satLotes.push({id:lote,archivo:l.r.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:l.r.placa+' · '+l.txt+' · solo ralentí'});
+    S.satrack.push({id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:0,ralentiH:l.r.ral,lote,soloRal:true});
     try{await fPut('satpdf:'+lote,l.r.file)}catch(e){}
     subirArchivoSat(lote,l.r.file)}
   S.satLotes=S.satLotes.filter(x=>!x.pdf||S.satrack.some(y=>y.lote===x.id));
-  SP=[];save();renderAll();spRender();toast((nR?nR+' ralentí(es) actualizado(s) sin modificar los km del informe Excel/API':'')+(nR&&nK?'; ':'')+(nK?nK+' estadística(s) guardada(s) con km del PDF (intervalo sin registros de Satrack)':''))}
+  SP=[];save();renderAll();spRender();toast(listo.length+' ralentí(es) guardado(s); los km de Satrack no se modificaron'+(sinKm?' ('+sinKm+' intervalo(s) aún sin informe Excel/API: cargue el Excel para tener los km)':''))}
 async function spVer(id){
   let f=null;try{f=await fGet('satpdf:'+id)}catch(e){}
   if(f){const u=URL.createObjectURL(f);window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),60000)}
