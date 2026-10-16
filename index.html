@@ -1212,7 +1212,7 @@ function satArchivo(file){
 function satMapear(hRow){
   const rows=satPrev.rows;let bi=hRow!=null?hRow:-1;
   if(bi<0){let best=0;for(let i=0;i<Math.min(20,rows.length);i++){const c=detectarCols(rows[i]),sc=[c.placa,c.desde,c.km].filter(x=>x>=0).length;if(sc>best){best=sc;bi=i}}if(bi<0)bi=0}
-  satPrev.h=bi;const hdr=rows[bi].map(x=>String(x)),c=detectarCols(hdr),ex=detectarExtra(hdr),nEx=Object.values(ex).filter(i=>i>=0).length;
+  satPrev.h=bi;const hdr=rows[bi].map(x=>String(x)),c=detectarCols(hdr),ex=detectarExtra(hdr);
   const opt=(sel,none)=>(none?'<option value="-1">(ninguna)</option>':'')+hdr.map((x,i)=>`<option value="${i}" ${i===sel?'selected':''}>${i+1}. ${esc(x||'(sin nombre)')}</option>`).join('');
   $('#sat-map').innerHTML=`<p class="small"><b>${esc(satPrev.nombre)}</b> · ${rows.length-bi-1} filas de datos</p>
   <div class="grid">
@@ -1223,14 +1223,19 @@ function satMapear(hRow){
     <div><label>Km recorridos *</label><select id="sm-km">${opt(c.km)}</select></div>
     <div><label>Ralentí (opcional)</label><select id="sm-ral">${opt(c.ral,true)}</select></div>
     <div><label>Unidad del ralentí</label><select id="sm-un"><option value="h">Horas (o hh:mm:ss)</option><option value="min">Minutos</option></select></div>
+    <div><label>Primer encendido (opcional)</label><select id="sm-enc">${opt(ex.enc,true)}</select></div>
+    <div><label>Último apagado (opcional)</label><select id="sm-apag">${opt(ex.apag,true)}</select></div>
+    <div><label>Horas de uso (opcional)</label><select id="sm-uso">${opt(ex.uso,true)}</select></div>
+    <div><label>Velocidad promedio (opcional)</label><select id="sm-vprom">${opt(ex.vprom,true)}</select></div>
+    <div><label>Velocidad máxima (opcional)</label><select id="sm-vmax">${opt(ex.vmax,true)}</select></div>
   </div>
-  ${nEx?`<p class="small muted" style="margin:8px 0 0">Columnas adicionales detectadas y que se guardarán: ${[['uso','Horas de uso'],['vprom','Vel. prom'],['vmax','Vel. máx'],['enc','Primer encendido'],['apag','Último apagado'],['ui','Ubicación primer encendido'],['uf','Ubicación último apagado']].filter(([k])=>ex[k]>=0).map(x=>x[1]).join(', ')}.</p>`:''}
+  ${(ex.ui>=0||ex.uf>=0)?`<p class="small muted" style="margin:8px 0 0">También se guardarán las columnas de ubicación del primer encendido y último apagado.</p>`:''}
   <div id="sm-prev" style="margin-top:10px"></div>
   <div class="row" style="margin-top:10px"><button class="btn" type="button" id="sm-ok">Importar al sistema</button><button class="btn sec" type="button" id="sm-x">Cancelar</button></div>`;
-  const read=()=>({placa:+$('#sm-placa').value,desde:+$('#sm-desde').value,hasta:+$('#sm-hasta').value,km:+$('#sm-km').value,ral:+$('#sm-ral').value,ex}),un=()=>$('#sm-un').value;
+  const read=()=>({placa:+$('#sm-placa').value,desde:+$('#sm-desde').value,hasta:+$('#sm-hasta').value,km:+$('#sm-km').value,ral:+$('#sm-ral').value,ex:{enc:+$('#sm-enc').value,apag:+$('#sm-apag').value,uso:+$('#sm-uso').value,vprom:+$('#sm-vprom').value,vmax:+$('#sm-vmax').value,ui:ex.ui,uf:ex.uf}}),un=()=>$('#sm-un').value;
   const prev=()=>{const m=read();const data=satPrev.rows.slice(satPrev.h+1);const ok=data.map(r=>filaSat(r,m,'x',un())).filter(Boolean);
-    $('#sm-prev').innerHTML=`<p class="small muted">${ok.length} de ${data.length} filas reconocidas. Vista previa:</p><div class="wrap"><table class="tbl"><tr><th>Placa</th><th>Intervalo</th><th class="n">Km</th><th class="n">Ralentí h</th></tr>${ok.slice(0,5).map(s=>`<tr><td>${esc(s.placa)}</td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td class="n">${fmt(s.ralentiH,1)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">No se reconoció ninguna fila: revise las columnas.</td></tr>'}</table></div>`};
-  ['#sm-placa','#sm-desde','#sm-hasta','#sm-km','#sm-ral','#sm-un'].forEach(s=>$(s).onchange=prev);
+    $('#sm-prev').innerHTML=`<p class="small muted">${ok.length} de ${data.length} filas reconocidas. Vista previa:</p><div class="wrap"><table class="tbl"><tr><th>Placa</th><th>Intervalo</th><th class="n">Km</th><th>Primer encendido</th><th>Último apagado</th><th class="n">Horas de uso</th><th class="n">Vel. prom</th><th class="n">Vel. máx</th><th class="n">Ralentí h</th></tr>${ok.slice(0,5).map(s=>`<tr><td>${esc(s.placa)}</td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td>${esc(s.primerEnc||'—')}</td><td>${esc(s.ultimoApag||'—')}</td><td class="n">${isNum(s.horasUso)?fmt(s.horasUso,1)+' h':'—'}</td><td class="n">${isNum(s.velProm)?fmt(s.velProm,1):'—'}</td><td class="n">${isNum(s.velMax)?fmt(s.velMax,0):'—'}</td><td class="n">${fmt(s.ralentiH,1)}</td></tr>`).join('')||'<tr><td colspan="9" class="muted">No se reconoció ninguna fila: revise las columnas.</td></tr>'}</table></div>`};
+  ['#sm-placa','#sm-desde','#sm-hasta','#sm-km','#sm-ral','#sm-un','#sm-enc','#sm-apag','#sm-uso','#sm-vprom','#sm-vmax'].forEach(s=>$(s).onchange=prev);
   $('#sm-h').onchange=()=>satMapear(Math.max(0,(+$('#sm-h').value||1)-1));
   $('#sm-x').onclick=()=>{satPrev=null;$('#sat-map').innerHTML=''};
   $('#sm-ok').onclick=()=>satImportar(read(),un());
