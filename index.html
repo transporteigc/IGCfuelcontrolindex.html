@@ -170,7 +170,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
             <button type="button" class="btn sec sm" id="b-odo-up">📷 SUBIR FOTO DEL ODÓMETRO</button>
             <button type="button" class="btn sec sm" id="b-odo-cam">📷 TOMAR FOTO</button>
           </div>
-          <input type="file" accept="image/*" id="i-odo-up" hidden>
+          <input type="file" accept="image/*" id="i-odo-up" multiple hidden>
           <input type="file" accept="image/*" capture="environment" id="i-odo-cam" hidden>
           <div id="p-odo" class="small muted" style="margin-top:6px"></div>
         </div>
@@ -180,7 +180,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
             <button type="button" class="btn sec sm" id="b-comp-up">📷 SUBIR COMPROBANTE</button>
             <button type="button" class="btn sec sm" id="b-comp-cam">📷 TOMAR FOTO</button>
           </div>
-          <input type="file" accept="image/*" id="i-comp-up" hidden>
+          <input type="file" accept="image/*" id="i-comp-up" multiple hidden>
           <input type="file" accept="image/*" capture="environment" id="i-comp-cam" hidden>
           <div id="p-comp" class="small muted" style="margin-top:6px"></div>
         </div>
@@ -974,7 +974,18 @@ function tablaViajes(vs,acciones){
 }
 
 /* ===================== Render: tanqueos ===================== */
-let editing=null,pend={odo:null,comp:null};
+/* Fotos: varias por tipo. Clave en IndexedDB: id:tipo (la primera, compatible con registros anteriores) e id:tipo:N (las demás). El registro guarda la cantidad. */
+const nFoto=v=>v===true||v==='TRUE'||v==='true'?1:(Number(v)||0);
+const fk=(id,tipo,i)=>i?id+':'+tipo+':'+i:id+':'+tipo;
+const nuevoPend=()=>({odo:[],comp:[],clr:{odo:false,comp:false}});
+let editing=null,pend=nuevoPend();
+function fotoRes(tipo){
+  const out=$('#p-'+tipo),P=pend[tipo],prev=editing?S.tanqueos.find(x=>x.id===editing):null,campo=tipo==='odo'?'fotoOdo':'fotoComp',nPrev=prev?nFoto(prev[campo]):0,eti=tipo==='odo'?'odómetro':'comprobante';
+  out.innerHTML=(nPrev?(pend.clr[tipo]?`<div>Las ${nPrev} foto(s) de ${eti} ya adjuntas se eliminarán al guardar</div>`:`<div>${nPrev} foto(s) de ${eti} ya adjunta(s) <button type="button" class="btn sec sm" data-clr="${tipo}">Quitar</button></div>`):'')
+    +(P.length?`<div class="row" style="margin-top:4px">${P.map((u,i)=>`<span style="position:relative"><img class="thumb" src="${u}" alt=""><button type="button" class="btn dng sm" data-rm="${i}" style="position:absolute;top:-6px;right:-6px;padding:0 6px">✕</button></span>`).join('')}</div><div>${P.length} foto(s) nueva(s) por guardar</div>`:'');
+  out.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{pend.clr[tipo]=true;fotoRes(tipo)});
+  out.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{P.splice(+b.dataset.rm,1);fotoRes(tipo)});
+}
 function renderListas(){
   $('#dl-placas').innerHTML=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].map(p=>`<option value="${esc(p)}">`).join('');
   $('#dl-cond').innerHTML=S.conductores.map(c=>`<option value="${esc(c.nombre)}">`).join('');
@@ -985,7 +996,7 @@ function renderTanqueos(){
   $('#tbl-tanqueos').innerHTML=rs.length?`<tr><th>Fecha / hora</th><th>Vehículo</th><th>Conductor</th><th class="n">Odómetro</th><th class="n">Galones</th><th class="n">Precio/gal</th><th class="n">Total</th><th>Full</th><th class="n">Satrack (int.)</th><th class="n">Ralentí h</th><th>Fotos</th><th>Alertas</th><th></th></tr>`+
   rs.map(r=>{const fl=(all[r.placa]&&all[r.placa].flags[r.id])||[];
     return `<tr><td>${fd(r.fecha)} ${esc(r.hora||'')}</td><td><b>${esc(r.placa)}</b></td><td>${esc(r.conductor)}</td><td class="n">${fmt(r.odo)}</td><td class="n">${fmt(r.gal,2)}</td><td class="n">${isNum(r.precio)?money(r.precio):'—'}</td><td class="n">${isNum(r.precio)?money(r.gal*r.precio):'—'}</td><td>${r.full?'Sí':'No'}</td><td class="n">${fmt(num(r.satKm))}</td><td class="n">${fmt(num(r.ralentiH),1)}</td>
-    <td>${r.fotoOdo?`<button class="btn sec sm" data-foto="${r.id}:odo">Odómetro</button>`:''} ${r.fotoComp?`<button class="btn sec sm" data-foto="${r.id}:comp">Comprobante</button>`:''}</td>
+    <td>${nFoto(r.fotoOdo)?`<button class="btn sec sm" data-foto="${r.id}:odo">Odómetro${nFoto(r.fotoOdo)>1?' ('+nFoto(r.fotoOdo)+')':''}</button>`:''} ${nFoto(r.fotoComp)?`<button class="btn sec sm" data-foto="${r.id}:comp">Comprobante${nFoto(r.fotoComp)>1?' ('+nFoto(r.fotoComp)+')':''}</button>`:''}</td>
     <td>${fl.map(x=>chip(x.n,x.c)).join('<br>')||'<span class="muted">—</span>'}${r.obs?`<div class="small muted">${esc(r.obs)}</div>`:''}</td>
     <td class="n"><button class="btn sec sm" data-et="${r.id}">Editar</button> <button class="btn sec sm" data-dt="${r.id}">Borrar</button></td></tr>`}).join(''):'';
   $$('#tbl-tanqueos [data-foto]').forEach(b=>b.onclick=()=>verFoto(b.dataset.foto));
@@ -994,31 +1005,32 @@ function renderTanqueos(){
 }
 async function verFoto(k){
   const [id,tipo]=k.split(':'),r=S.tanqueos.find(x=>x.id===id);if(!r)return;
-  let url=null;try{url=await fGet(k)}catch(e){}
-  $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tipo==='odo'?'Foto del odómetro':'Comprobante de combustible'}</h3>
+  const n=Math.max(1,nFoto(tipo==='odo'?r.fotoOdo:r.fotoComp)),urls=[];
+  for(let i=0;i<n;i++){try{const u=await fGet(fk(id,tipo,i));if(u)urls.push(u)}catch(e){}}
+  $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tipo==='odo'?'Fotos del odómetro':'Comprobantes de combustible'}${urls.length>1?' ('+urls.length+')':''}</h3>
     <p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmt(r.gal,2)} gal${r.full?' (full)':''} · Conductor ${esc(r.conductor)}</p>
-    ${url?`<img src="${url}" alt="Foto">`:'<p class="muted">La imagen no está disponible en este navegador.</p>'}`;
+    ${urls.length?urls.map((u,i)=>`<img src="${u}" alt="Foto ${i+1}" style="margin-bottom:8px">`).join(''):'<p class="muted">La imagen no está disponible en este navegador.</p>'}`;
   $('#dlg').showModal();
 }
 function limpiarFormTanqueo(){
-  editing=null;pend={odo:null,comp:null};$('#f-tanqueo').reset();$('#t-full').checked=true;
+  editing=null;pend=nuevoPend();$('#f-tanqueo').reset();$('#t-full').checked=true;
   $('#p-odo').textContent='';$('#p-comp').textContent='';$('#t-live').innerHTML='';$('#t-total').textContent='';
   $('#t-titulo').textContent='Registrar tanqueo';$('#t-cancelar').hidden=true;$('#t-guardar').textContent='Guardar tanqueo';
   const n=new Date();
   $('#t-fecha').value=n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());$('#t-hora').value=pad(n.getHours())+':'+pad(n.getMinutes());
 }
 function editarTanqueo(id){
-  const r=S.tanqueos.find(x=>x.id===id);if(!r)return;editing=id;pend={odo:null,comp:null};
+  const r=S.tanqueos.find(x=>x.id===id);if(!r)return;editing=id;pend=nuevoPend();
   $('#t-fecha').value=r.fecha;$('#t-hora').value=r.hora||'';$('#t-placa').value=r.placa;$('#t-conductor').value=r.conductor;
   $('#t-odo').value=r.odo;$('#t-gal').value=r.gal;$('#t-precio').value=r.precio??'';totalLive();$('#t-full').checked=!!r.full;$('#t-sat').value=r.satKm??'';$('#t-ralenti').value=r.ralentiH??'';$('#t-obs').value=r.obs||'';
-  $('#p-odo').textContent=r.fotoOdo?'Foto del odómetro ya adjunta (suba otra para reemplazarla)':'';
-  $('#p-comp').textContent=r.fotoComp?'Comprobante ya adjunto (suba otro para reemplazarlo)':'';
+  fotoRes('odo');fotoRes('comp');
   $('#t-titulo').textContent='Editar tanqueo';$('#t-cancelar').hidden=false;$('#t-guardar').textContent='Guardar cambios';
   liveCheck();window.scrollTo({top:0,behavior:'smooth'});
 }
 async function borrarTanqueo(id){
   if(!confirm('¿Borrar este registro de tanqueo? Esta acción es manual y no se puede deshacer.'))return;
-  S.tanqueos=S.tanqueos.filter(x=>x.id!==id);fDel(id+':odo');fDel(id+':comp');save();renderAll();toast('Registro borrado');
+  const t=S.tanqueos.find(x=>x.id===id);if(t){for(let i=0;i<Math.max(1,nFoto(t.fotoOdo));i++)fDel(fk(id,'odo',i));for(let i=0;i<Math.max(1,nFoto(t.fotoComp));i++)fDel(fk(id,'comp',i))}
+  S.tanqueos=S.tanqueos.filter(x=>x.id!==id);save();renderAll();toast('Registro borrado');
 }
 function totalLive(){const g=num($('#t-gal').value),p=num($('#t-precio').value);$('#t-total').textContent=(g!=null&&p!=null)?'Total del tanqueo: '+money(g*p):''}
 function liveCheck(){
@@ -1044,9 +1056,13 @@ async function guardarTanqueo(ev){
     if(!confirm('La lectura del odómetro presenta una inconsistencia. El registro se guardará marcado para revisión, sin modificar ni descartar el dato. ¿Continuar?'))return;
   }
   const prev=editing?S.tanqueos.find(x=>x.id===editing):null;
-  r.fotoOdo=!!(pend.odo||(prev&&prev.fotoOdo));r.fotoComp=!!(pend.comp||(prev&&prev.fotoComp));
-  try{if(pend.odo)await fPut(r.id+':odo',pend.odo);if(pend.comp)await fPut(r.id+':comp',pend.comp)}
-  catch(e){toast('No se pudieron guardar las fotos en este navegador');r.fotoOdo=!!(prev&&prev.fotoOdo);r.fotoComp=!!(prev&&prev.fotoComp)}
+  const guardarFotos=async(tipo,campo)=>{
+    const nPrev=prev?nFoto(prev[campo]):0;let n=pend.clr[tipo]?0:nPrev;
+    if(pend.clr[tipo])for(let i=0;i<Math.max(1,nPrev);i++)await fDel(fk(r.id,tipo,i));
+    for(const u of pend[tipo]){await fPut(fk(r.id,tipo,n),u);n++}
+    return n};
+  try{r.fotoOdo=await guardarFotos('odo','fotoOdo');r.fotoComp=await guardarFotos('comp','fotoComp')}
+  catch(e){toast('No se pudieron guardar las fotos en este navegador');r.fotoOdo=prev?nFoto(prev.fotoOdo):0;r.fotoComp=prev?nFoto(prev.fotoComp):0}
   if(editing)S.tanqueos=S.tanqueos.map(x=>x.id===editing?r:x);else S.tanqueos.push(r);
   let aviso=null;
   if(!S.vehiculos.find(v=>v.placa===r.placa)){S.vehiculos.push({placa:r.placa,capacidad:null,std:0.15,ralenti:null});aviso='Vehículo '+r.placa+' agregado con estándar inicial 0,150 gal/km: calibrar en Configuración'}
@@ -1054,8 +1070,9 @@ async function guardarTanqueo(ev){
 }
 function fotoInput(btn,input,key,out){
   $(btn).onclick=()=>$(input).click();
-  $(input).onchange=async e=>{const f=e.target.files[0];if(!f)return;
-    try{pend[key]=await compress(f);$(out).textContent='Foto lista: '+f.name}catch(x){toast('No se pudo leer la imagen')}e.target.value=''};
+  $(input).onchange=async e=>{const fs=[...e.target.files];if(!fs.length)return;
+    for(const f of fs){try{pend[key].push(await compress(f))}catch(x){toast('No se pudo leer la imagen '+f.name)}}
+    fotoRes(key);e.target.value=''};
 }
 
 /* ===================== Render: viajes ===================== */
