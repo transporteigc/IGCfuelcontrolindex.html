@@ -311,7 +311,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
 <section id="tab-satrack">
   <div class="card">
     <h2>Informe de Satrack</h2>
-    <p class="muted small" style="margin-top:0">Suba el informe de recorridos de Satrack (PDF, Excel o CSV). Cada fila es un intervalo con los km recorridos (el punto de partida siempre es 0). El sistema los asigna a los períodos de tanqueo de cada vehículo y los compara con odómetro y viajes. Si vuelve a subir el mismo intervalo, se actualiza y no se duplica. <b>API de Satrack:</b> trae los eventos de los últimos 5 días (límite del servicio) y calcula los km de cada día como la diferencia de odómetro entre el primer y el último evento; puede tardar varios minutos porque Satrack permite 4 consultas por minuto.</p>
+    <p class="muted small" style="margin-top:0">Suba el informe de recorridos de Satrack (PDF, Excel o CSV). El Excel descargado de Satrack («Distancia, uso y velocidad») se lee directamente: se usa la hoja <i>Detalle</i> (Vehículo, Fecha, Primer encendido, Último apagado, Distancia, Horas de uso, Vel. prom, Vel. máx y ubicaciones) y la placa se toma del nombre del vehículo (p. ej. «TRACTOCAMIÓN SRO483»). Cada fila es un intervalo con los km recorridos (el punto de partida siempre es 0). El sistema los asigna a los períodos de tanqueo de cada vehículo y los compara con odómetro y viajes. Si vuelve a subir el mismo intervalo, se actualiza y no se duplica. <b>API de Satrack:</b> trae los eventos de los últimos 5 días (límite del servicio) y calcula los km de cada día como la diferencia de odómetro entre el primer y el último evento; puede tardar varios minutos porque Satrack permite 4 consultas por minuto.</p>
     <div class="row">
       <button class="btn" type="button" id="sat-btn">Subir informe (PDF, Excel o CSV)</button>
       <button class="btn sec" type="button" id="sat-api">Sincronizar desde API Satrack</button>
@@ -1175,14 +1175,26 @@ function parseFecha(v){
   if(m)return mk(m[3],+m[2],+m[1],m[4]?+m[4]:0,m[5]?+m[5]:0,!m[4]);
   return null;
 }
+/* Informe Excel de Satrack (Distancia, uso y velocidad): columnas adicionales opcionales */
+function placaSat(v){const t=String(v==null?'':v).toUpperCase(),m=t.match(/(?:^|[^A-Z0-9])([A-Z]{3})[\s-]?(\d{3})(?![A-Z0-9])/);return m?m[1]+m[2]:normPlaca(t)}
+function detectarExtra(hdr){const h=hdr.map(norm),f=re=>h.findIndex(x=>re.test(x));
+  return{uso:f(/horas? de uso/),vprom:f(/vel.*prom/),vmax:f(/vel.*max/),enc:f(/^primer encendido/),apag:f(/^ultimo apagado/),ui:f(/ubicacion.*(primer|encendido)/),uf:f(/ubicacion.*(ultimo|apagado)/)}}
+function horasTxt(v){if(v==null||v==='')return null;if(typeof v==='number')return v;const t=String(v),h=t.match(/(\d+)\s*h/),mi=t.match(/(\d+)\s*min/);if(h||mi)return (h?+h[1]:0)+(mi?+mi[1]/60:0);return parseHoras(v)}
+function horaClock(v){if(v==null||v===''||v==='-')return '';if(v instanceof Date&&!isNaN(v))return pad(v.getHours())+':'+pad(v.getMinutes())+':'+pad(v.getSeconds());if(typeof v==='number'&&v>=0&&v<1){const t=Math.round(v*86400);return pad(Math.floor(t/3600))+':'+pad(Math.floor(t%3600/60))+':'+pad(t%60)}return String(v).trim()}
+function ubicTxt(v){if(v==null)return '';const t=String(v).trim();if(!t||t==='-')return '';const m=t.match(/^=\s*HYPERLINK\(.*,\s*"([^"]*)"\s*\)\s*$/i);return m?m[1]:t}
 function filaSat(r,m,lote,unidad){
-  const placa=normPlaca(r[m.placa]);if(!placa||placa.includes('TOTAL'))return null;
+  const placa=placaSat(r[m.placa]);if(!placa||placa.includes('TOTAL'))return null;
   const d=parseFecha(r[m.desde]),km=parseKm(r[m.km]);if(!d||km==null)return null;
   const h=m.hasta>=0?parseFecha(r[m.hasta]):null,day0=iso=>new Date(iso.slice(0,10)+'T00:00').getTime();
   let t0=d.solo?day0(d.iso):new Date(d.iso).getTime(),t1;
   if(h)t1=h.solo?day0(h.iso)+DIA-60000:new Date(h.iso).getTime();else t1=d.solo?t0+DIA-60000:t0;
   if(t1<t0)[t0,t1]=[t1,t0];
-  return{id:uid(),placa,t0,t1,km,ralentiH:m.ral>=0?parseHoras(r[m.ral],unidad):null,lote};
+  const o={id:uid(),placa,t0,t1,km,ralentiH:m.ral>=0?parseHoras(r[m.ral],unidad):null,lote},x=m.ex;
+  if(x){const nv=i=>i>=0?parseKm(r[i]):null;
+    if(x.uso>=0)o.horasUso=horasTxt(r[x.uso]);if(x.vprom>=0)o.velProm=nv(x.vprom);if(x.vmax>=0)o.velMax=nv(x.vmax);
+    if(x.enc>=0)o.primerEnc=horaClock(r[x.enc]);if(x.apag>=0)o.ultimoApag=horaClock(r[x.apag]);
+    if(x.ui>=0)o.ubicIni=ubicTxt(r[x.ui]);if(x.uf>=0)o.ubicFin=ubicTxt(r[x.uf])}
+  return o;
 }
 let satPrev=null;
 function satArchivo(file){
@@ -1190,13 +1202,17 @@ function satArchivo(file){
   if(ext==='pdf'){if(typeof pdfjsLib==='undefined')return toast('Leer PDF requiere conexión a internet (pdf.js)');pdfRows(file).then(fin).catch(()=>toast('No se pudo leer el PDF (¿es un escaneo sin texto?). Use el Excel o CSV.'));return}
   const rd=new FileReader();
   if(ext==='csv'||ext==='txt'){rd.onload=()=>fin(parseCSV(rd.result));rd.readAsText(file,'UTF-8')}
-  else if(typeof XLSX!=='undefined'){rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array',cellDates:true}),ws=wb.Sheets[wb.SheetNames[0]];fin(XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''}))}catch(e){toast('No se pudo leer el archivo Excel')}};rd.readAsArrayBuffer(file)}
+  else if(typeof XLSX!=='undefined'){rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array',cellDates:true});let best=null,bs=-1;
+    wb.SheetNames.forEach(n=>{const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});let sc=0;
+      for(let i=0;i<Math.min(20,rows.length);i++){const hd=rows[i].map(String),c=detectarCols(hd),k=[c.placa,c.desde,c.km].filter(x=>x>=0).length+(hd.some(x=>/^fecha/.test(norm(x)))?1:0);if(k>sc)sc=k}
+      if(sc>bs){bs=sc;best=rows}});/* elige la hoja con fecha + placa + distancia (p. ej. «Detalle») */
+    if(!best||!best.length){toast('El archivo no tiene datos');return}fin(best)}catch(e){toast('No se pudo leer el archivo Excel')}};rd.readAsArrayBuffer(file)}
   else toast('Para leer Excel se requiere conexión a internet; guarde el informe como CSV');
 }
 function satMapear(hRow){
   const rows=satPrev.rows;let bi=hRow!=null?hRow:-1;
   if(bi<0){let best=0;for(let i=0;i<Math.min(20,rows.length);i++){const c=detectarCols(rows[i]),sc=[c.placa,c.desde,c.km].filter(x=>x>=0).length;if(sc>best){best=sc;bi=i}}if(bi<0)bi=0}
-  satPrev.h=bi;const hdr=rows[bi].map(x=>String(x)),c=detectarCols(hdr);
+  satPrev.h=bi;const hdr=rows[bi].map(x=>String(x)),c=detectarCols(hdr),ex=detectarExtra(hdr),nEx=Object.values(ex).filter(i=>i>=0).length;
   const opt=(sel,none)=>(none?'<option value="-1">(ninguna)</option>':'')+hdr.map((x,i)=>`<option value="${i}" ${i===sel?'selected':''}>${i+1}. ${esc(x||'(sin nombre)')}</option>`).join('');
   $('#sat-map').innerHTML=`<p class="small"><b>${esc(satPrev.nombre)}</b> · ${rows.length-bi-1} filas de datos</p>
   <div class="grid">
@@ -1208,9 +1224,10 @@ function satMapear(hRow){
     <div><label>Ralentí (opcional)</label><select id="sm-ral">${opt(c.ral,true)}</select></div>
     <div><label>Unidad del ralentí</label><select id="sm-un"><option value="h">Horas (o hh:mm:ss)</option><option value="min">Minutos</option></select></div>
   </div>
+  ${nEx?`<p class="small muted" style="margin:8px 0 0">Columnas adicionales detectadas y que se guardarán: ${[['uso','Horas de uso'],['vprom','Vel. prom'],['vmax','Vel. máx'],['enc','Primer encendido'],['apag','Último apagado'],['ui','Ubicación primer encendido'],['uf','Ubicación último apagado']].filter(([k])=>ex[k]>=0).map(x=>x[1]).join(', ')}.</p>`:''}
   <div id="sm-prev" style="margin-top:10px"></div>
   <div class="row" style="margin-top:10px"><button class="btn" type="button" id="sm-ok">Importar al sistema</button><button class="btn sec" type="button" id="sm-x">Cancelar</button></div>`;
-  const read=()=>({placa:+$('#sm-placa').value,desde:+$('#sm-desde').value,hasta:+$('#sm-hasta').value,km:+$('#sm-km').value,ral:+$('#sm-ral').value}),un=()=>$('#sm-un').value;
+  const read=()=>({placa:+$('#sm-placa').value,desde:+$('#sm-desde').value,hasta:+$('#sm-hasta').value,km:+$('#sm-km').value,ral:+$('#sm-ral').value,ex}),un=()=>$('#sm-un').value;
   const prev=()=>{const m=read();const data=satPrev.rows.slice(satPrev.h+1);const ok=data.map(r=>filaSat(r,m,'x',un())).filter(Boolean);
     $('#sm-prev').innerHTML=`<p class="small muted">${ok.length} de ${data.length} filas reconocidas. Vista previa:</p><div class="wrap"><table class="tbl"><tr><th>Placa</th><th>Intervalo</th><th class="n">Km</th><th class="n">Ralentí h</th></tr>${ok.slice(0,5).map(s=>`<tr><td>${esc(s.placa)}</td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td class="n">${fmt(s.ralentiH,1)}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">No se reconoció ninguna fila: revise las columnas.</td></tr>'}</table></div>`};
   ['#sm-placa','#sm-desde','#sm-hasta','#sm-km','#sm-ral','#sm-un'].forEach(s=>$(s).onchange=prev);
@@ -1227,7 +1244,7 @@ function satImportar(m,unidad){
   const lote=uid(),data=satPrev.rows.slice(satPrev.h+1);let nu=0,up=0,om=0;const desc=new Set();
   data.forEach(r=>{const s=filaSat(r,m,lote,unidad);if(!s){om++;return}
     const ex=S.satrack.find(x=>x.placa===s.placa&&x.t0===s.t0&&x.t1===s.t1);
-    if(ex){ex.km=s.km;ex.ralentiH=s.ralentiH;ex.lote=lote;up++}else{S.satrack.push(s);nu++}
+    if(ex){const id0=ex.id;Object.assign(ex,s,{id:id0});up++}else{S.satrack.push(s);nu++}
     if(!S.vehiculos.find(v=>v.placa===s.placa)&&!S.tanqueos.some(t=>t.placa===s.placa))desc.add(s.placa);
   });
   if(!nu&&!up){toast('No se importó ninguna fila: revise las columnas');return}
@@ -1243,9 +1260,9 @@ function renderSatrack(){
   const sel=$('#sat-placa'),cur=sel.value,pl=[...new Set(S.satrack.map(s=>s.placa))].sort();
   sel.innerHTML='<option value="">Toda la flota</option>'+pl.map(p=>`<option>${esc(p)}</option>`).join('');if(pl.includes(cur))sel.value=cur;
   const rows=S.satrack.filter(s=>!sel.value||s.placa===sel.value).sort((a,b)=>b.t0-a.t0);
-  $('#tbl-sat').innerHTML=rows.length?`<tr><th>Vehículo</th><th>Intervalo</th><th class="n">Km Satrack</th><th class="n">Ralentí h</th><th class="n">Viajes</th><th class="n">Km viajes (ruta)</th><th class="n">Satrack vs viajes</th><th class="n">Gal. aprox.</th></tr>`+rows.slice(0,400).map(s=>{
+  $('#tbl-sat').innerHTML=rows.length?`<tr><th>Vehículo</th><th>Intervalo</th><th class="n">Km Satrack</th><th>Primer encendido</th><th>Último apagado</th><th class="n">Horas de uso</th><th class="n">Vel. prom / máx</th><th class="n">Ralentí h</th><th class="n">Viajes</th><th class="n">Km viajes (ruta)</th><th class="n">Satrack vs viajes</th><th class="n">Gal. aprox.</th></tr>`+rows.slice(0,400).map(s=>{
     const tv=S.viajes.filter(v=>v.placa===s.placa&&dtV(v)>=s.t0&&dtV(v)<=s.t1),km=tv.reduce((a,v)=>a+kmViaje(v),0),dif=km>0?(s.km-km)/km*100:null;
-    return `<tr><td><b>${esc(s.placa)}</b></td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td class="n">${fmt(s.ralentiH,1)}</td><td class="n">${tv.reduce((a,v)=>a+nV(v),0)}</td><td class="n">${tv.length?fmt(km,1):'—'}</td><td class="n ${Math.abs(dif)>S.config.tolPct?'bad':''}">${sg(dif)}</td><td class="n">${tv.length?fmt(tv.reduce((a,v)=>a+galViaje(v),0),1):'—'}</td></tr>`}).join(''):'<tr><td class="muted">Sin registros de Satrack.</td></tr>';
+    return `<tr><td><b>${esc(s.placa)}</b></td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td>${s.primerEnc?esc(s.primerEnc)+(s.ubicIni?'<div class="small muted">'+esc(s.ubicIni)+'</div>':''):'—'}</td><td>${s.ultimoApag?esc(s.ultimoApag)+(s.ubicFin?'<div class="small muted">'+esc(s.ubicFin)+'</div>':''):'—'}</td><td class="n">${isNum(s.horasUso)?fmt(s.horasUso,1)+' h':'—'}</td><td class="n">${isNum(s.velProm)||isNum(s.velMax)?fmt(s.velProm,1)+' / '+fmt(s.velMax,0):'—'}</td><td class="n">${fmt(s.ralentiH,1)}</td><td class="n">${tv.reduce((a,v)=>a+nV(v),0)}</td><td class="n">${tv.length?fmt(km,1):'—'}</td><td class="n ${Math.abs(dif)>S.config.tolPct?'bad':''}">${sg(dif)}</td><td class="n">${tv.length?fmt(tv.reduce((a,v)=>a+galViaje(v),0),1):'—'}</td></tr>`}).join(''):'<tr><td class="muted">Sin registros de Satrack.</td></tr>';
 }
 
 /* ===================== Gerencial ===================== */
@@ -1963,7 +1980,7 @@ function libro(sec){
  if(sec==='facturas'){const D=docsFac().map(d=>({d,c:calcDoc(d)}));
   W['Conciliación por factura']=TT(['Estado','Factura','Proveedor','NIT','Fecha factura','Período desde','Período hasta','Gal. factura','Valor factura','N.º tanqueos','Gal. tanqueos','Valor tanqueos','Dif. gal','Dif. %','Dif. valor','Retención aplicada','Tarifa retención %','Base retención','Valor retenido','Neto a pagar','Comentarios'],D.map(({d,c})=>[c.e,d.factura,d.proveedor,d.head.nit||'',d.fecha,d.head.pIni||'',d.head.pFin||'',d.gal,d.valor,c.T.length,c.tg,c.tv,c.dg,c.pg,c.dv,c.rfOn?'Sí':'No',c.rfOn?c.pct:'',c.rfOn?c.base:'',c.ret,c.neto,(d.head.coment||'').replace(/\n/g,' | ')]));
   W['Tanqueos por factura']=TT(['Factura','Fecha tanqueo','Hora','Placa','Conductor','Galones','Precio gal.','Valor'],D.flatMap(({d,c})=>c.T.map(t=>[d.factura,t.fecha,t.hora||'',t.placa,t.conductor||'',t.gal,t.precio,isNum(t.precio)?t.gal*t.precio:null])))}
- if(sec==='satrack'){W['Registros Satrack']=TT(['Placa','Desde','Hasta','Km','Ralentí h','Informe'],[...S.satrack].sort((a,b)=>a.t0-b.t0).map(s=>[s.placa,fT(s.t0),fT(s.t1),s.km,s.ralentiH,(S.satLotes.find(l=>l.id===s.lote)||{}).archivo||'']));W['Informes cargados']=TT(['Archivo','Cargado','Registros','Enlace Drive'],S.satLotes.map(l=>[l.archivo,l.fecha,S.satrack.filter(s=>s.lote===l.id).length,l.url||'']))}
+ if(sec==='satrack'){W['Registros Satrack']=TT(['Placa','Desde','Hasta','Km','Primer encendido','Último apagado','Horas de uso','Vel. prom','Vel. máx','Ubicación primer encendido','Ubicación último apagado','Ralentí h','Informe'],[...S.satrack].sort((a,b)=>a.t0-b.t0).map(s=>[s.placa,fT(s.t0),fT(s.t1),s.km,s.primerEnc||'',s.ultimoApag||'',s.horasUso==null?'':+s.horasUso.toFixed(2),s.velProm==null?'':s.velProm,s.velMax==null?'':s.velMax,s.ubicIni||'',s.ubicFin||'',s.ralentiH,(S.satLotes.find(l=>l.id===s.lote)||{}).archivo||'']));W['Informes cargados']=TT(['Archivo','Cargado','Registros','Enlace Drive'],S.satLotes.map(l=>[l.archivo,l.fecha,S.satrack.filter(s=>s.lote===l.id).length,l.url||'']))}
  if(sec==='gerencial'){
   const a=agg(per,modo);W['Indicadores']=TT(['Indicador','Valor'],[['Base de km',bn],['Períodos',a.n],['Km',a.km],['Galones',a.gal],['Gal/km',a.galkm],['Km/gal',a.kmgal],['Desviación %',a.desv],['Sobreconsumo gal',a.sobreGal],['Sobreconsumo $',a.sobreCosto],['Costo/km',a.costoKm],['Viajes',a.nViajes],['Costo/viaje',a.costoViaje]]);
   [['dia','Día'],['mes','Mes'],['conductor','Conductor'],['ruta','Ruta'],['vehiculo','Vehículo']].forEach(([d,n])=>W['Por '+n.toLowerCase()]=TT([n,'Gal. consumidos','Gasto','Km','Costo/km','Viajes',...REFS.flatMap(r=>['Dif. gal vs '+r[1],'Dif. % vs '+r[1]]),'Sobreconsumo $ (odómetro)'],analisisDim(per,d,modo).map(g=>[d==='mes'||d==='dia'?g.k:g.k,g.gal,g.galP>0?g.costo:null,g.km,g.kmP>0?g.costo/g.kmP:null,g.nV,...REFS.flatMap(r=>{const x=g.ref[r[0]];return x?[x.real-x.esp,x.esp>0?(x.real-x.esp)/x.esp*100:null]:[null,null]}),sobre$(g)])));
