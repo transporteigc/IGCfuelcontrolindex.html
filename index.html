@@ -347,7 +347,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
   </div>
   <div class="card" id="sat-pdf-card">
     <h2>Estadísticas de Satrack por intervalo entre tanqueos (PDF)</h2>
-    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack para el intervalo entre dos tanqueos. El sistema intenta leer del PDF el vehículo, las fechas, los km recorridos y el ralentí; usted confirma o corrige antes de guardar. Al guardar, los km quedan como Satrack de ese intervalo (reemplazan los registros diarios del mismo intervalo para no duplicar) y el PDF queda adjunto en «Informes cargados».</p>
+    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack para el intervalo entre dos tanqueos. El sistema intenta leer del PDF el vehículo, las fechas, los km recorridos y el ralentí; usted confirma o corrige antes de guardar. Si en ese intervalo ya hay registros del informe Excel (o de la API), <b>se dejan tal cual</b> y del PDF solo se toma el <b>ralentí</b> (si vuelve a adjuntar el PDF, solo se actualiza el ralentí). Los km del PDF solo se usan cuando el intervalo no tiene ningún registro de Satrack. El PDF queda adjunto en «Informes cargados».</p>
     <div class="row"><button class="btn" type="button" id="sp-btn">Adjuntar PDF(s) de estadísticas</button><input type="file" id="sp-file" accept=".pdf,application/pdf" multiple hidden></div>
     <div id="sp-out" style="margin-top:12px"></div>
   </div>
@@ -623,14 +623,14 @@ function analizarPlaca(placa){
     p.mes=B.fecha.slice(0,7);p.dias=Math.max(0,(t1-t0)/DIA);
     p.kmOdo=B.odo-A.odo;
     {const pr=S.preop.filter(x=>x.placa===placa).sort((a,b)=>dtP(a)-dtP(b)),pf=pr.filter(x=>dtP(x)<=t1),pi=[...pr].reverse().find(x=>dtP(x)<=t0)||pr.find(x=>dtP(x)>t0&&dtP(x)<=t1);p.kmPre=(pf.length&&pi)?pf[pf.length-1].km-pi.km:null;if(p.kmPre!=null&&p.kmPre<=0)p.kmPre=null}
-    const sr=S.satrack.filter(s=>s.placa===placa&&satMid(s)>t0&&satMid(s)<=t1),man=seg.filter(r=>isNum(r.satKm));
+    const sr0=S.satrack.filter(s=>s.placa===placa&&satMid(s)>t0&&satMid(s)<=t1),sr=sr0.filter(x=>!x.soloRal),man=seg.filter(r=>isNum(r.satKm));
     if(sr.length){p.kmSat=sr.reduce((s,x)=>s+x.km,0);p.fuenteSat='Informe Satrack ('+sr.length+' registro'+(sr.length>1?'s':'')+')'}
     else if(man.length){p.kmSat=man.reduce((s,r)=>s+Number(r.satKm),0);p.fuenteSat='Ingreso manual'}
     else{p.kmSat=null;p.fuenteSat=null}
     const d=p.kmSat==null?null:dpair(p.kmOdo,p.kmSat);
     p.difAbs=d?d.abs:null;p.difSign=d?d.sign:null;p.difPct=d&&p.kmOdo>0?d.pct:null;
     p.gal=seg.reduce((s,r)=>s+(r.gal||0),0);
-    const srR=sr.filter(x=>isNum(x.ralentiH)),conR=seg.filter(r=>isNum(r.ralentiH));
+    const srRal=sr0.filter(x=>x.soloRal),srR=(srRal.length?srRal:sr).filter(x=>isNum(x.ralentiH)),conR=seg.filter(r=>isNum(r.ralentiH));
     p.ralentiH=srR.length?srR.reduce((s,x)=>s+x.ralentiH,0):(conR.length?conR.reduce((s,r)=>s+Number(r.ralentiH),0):null);
     p.viajes=S.viajes.filter(v=>v.placa===placa&&dtV(v)>t0&&dtV(v)<=t1).sort((a,b)=>dtV(a)-dtV(b));
     p.nViajes=p.viajes.reduce((s,v)=>s+nV(v),0);
@@ -1287,6 +1287,7 @@ function renderSatrack(){
   sel.innerHTML='<option value="">Toda la flota</option>'+pl.map(p=>`<option>${esc(p)}</option>`).join('');if(pl.includes(cur))sel.value=cur;
   const rows=S.satrack.filter(s=>!sel.value||s.placa===sel.value).sort((a,b)=>b.t0-a.t0);
   $('#tbl-sat').innerHTML=rows.length?`<tr><th>Vehículo</th><th>Intervalo</th><th class="n">Km Satrack</th><th>Primer encendido</th><th>Último apagado</th><th class="n">Horas de uso</th><th class="n">Vel. prom / máx</th><th class="n">Ralentí h</th><th class="n">Viajes</th><th class="n">Km viajes (ruta)</th><th class="n">Satrack vs viajes</th><th class="n">Gal. aprox.</th></tr>`+rows.slice(0,400).map(s=>{
+    if(s.soloRal)return `<tr><td><b>${esc(s.placa)}</b></td><td>${rangoTxt(s)}<div class="small muted">Ralentí del PDF (km del informe Excel/API sin cambios)</div></td><td class="n muted">—</td><td>—</td><td>—</td><td class="n">—</td><td class="n">—</td><td class="n">${fmt(s.ralentiH,1)}</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td></tr>`;
     const tv=S.viajes.filter(v=>v.placa===s.placa&&dtV(v)>=s.t0&&dtV(v)<=s.t1),km=tv.reduce((a,v)=>a+kmViaje(v),0),dif=km>0?(s.km-km)/km*100:null;
     return `<tr><td><b>${esc(s.placa)}</b></td><td>${rangoTxt(s)}</td><td class="n">${fmt(s.km,1)}</td><td>${s.primerEnc?esc(s.primerEnc)+(s.ubicIni?'<div class="small muted">'+esc(s.ubicIni)+'</div>':''):'—'}</td><td>${s.ultimoApag?esc(s.ultimoApag)+(s.ubicFin?'<div class="small muted">'+esc(s.ubicFin)+'</div>':''):'—'}</td><td class="n">${isNum(s.horasUso)?fmt(s.horasUso,1)+' h':'—'}</td><td class="n">${isNum(s.velProm)||isNum(s.velMax)?fmt(s.velProm,1)+' / '+fmt(s.velMax,0):'—'}</td><td class="n">${fmt(s.ralentiH,1)}</td><td class="n">${tv.reduce((a,v)=>a+nV(v),0)}</td><td class="n">${tv.length?fmt(km,1):'—'}</td><td class="n ${Math.abs(dif)>S.config.tolPct?'bad':''}">${sg(dif)}</td><td class="n">${tv.length?fmt(tv.reduce((a,v)=>a+galViaje(v),0),1):'—'}</td></tr>`}).join(''):'<tr><td class="muted">Sin registros de Satrack.</td></tr>';
 }
@@ -2007,7 +2008,7 @@ function libro(sec){
  if(sec==='facturas'){const D=docsFac().map(d=>({d,c:calcDoc(d)}));
   W['Conciliación por factura']=TT(['Estado','Factura','Proveedor','NIT','Fecha factura','Período desde','Período hasta','Gal. factura','Valor factura','N.º tanqueos','Gal. tanqueos','Valor tanqueos','Dif. gal','Dif. %','Dif. valor','Retención aplicada','Tarifa retención %','Base retención','Valor retenido','Neto a pagar','Comentarios'],D.map(({d,c})=>[c.e,d.factura,d.proveedor,d.head.nit||'',d.fecha,d.head.pIni||'',d.head.pFin||'',d.gal,d.valor,c.T.length,c.tg,c.tv,c.dg,c.pg,c.dv,c.rfOn?'Sí':'No',c.rfOn?c.pct:'',c.rfOn?c.base:'',c.ret,c.neto,(d.head.coment||'').replace(/\n/g,' | ')]));
   W['Tanqueos por factura']=TT(['Factura','Fecha tanqueo','Hora','Placa','Conductor','Galones','Precio gal.','Valor'],D.flatMap(({d,c})=>c.T.map(t=>[d.factura,t.fecha,t.hora||'',t.placa,t.conductor||'',t.gal,t.precio,isNum(t.precio)?t.gal*t.precio:null])))}
- if(sec==='satrack'){W['Registros Satrack']=TT(['Placa','Desde','Hasta','Km','Primer encendido','Último apagado','Horas de uso','Vel. prom','Vel. máx','Ubicación primer encendido','Ubicación último apagado','Ralentí h','Informe'],[...S.satrack].sort((a,b)=>a.t0-b.t0).map(s=>[s.placa,fT(s.t0),fT(s.t1),s.km,s.primerEnc||'',s.ultimoApag||'',s.horasUso==null?'':+s.horasUso.toFixed(2),s.velProm==null?'':s.velProm,s.velMax==null?'':s.velMax,s.ubicIni||'',s.ubicFin||'',s.ralentiH,(S.satLotes.find(l=>l.id===s.lote)||{}).archivo||'']));W['Informes cargados']=TT(['Archivo','Cargado','Registros','Enlace Drive'],S.satLotes.map(l=>[l.archivo,l.fecha,S.satrack.filter(s=>s.lote===l.id).length,l.url||'']))}
+ if(sec==='satrack'){W['Registros Satrack']=TT(['Placa','Desde','Hasta','Km','Primer encendido','Último apagado','Horas de uso','Vel. prom','Vel. máx','Ubicación primer encendido','Ubicación último apagado','Ralentí h','Informe'],[...S.satrack].sort((a,b)=>a.t0-b.t0).map(s=>[s.placa,fT(s.t0),fT(s.t1),s.soloRal?'':s.km,s.primerEnc||'',s.ultimoApag||'',s.horasUso==null?'':+s.horasUso.toFixed(2),s.velProm==null?'':s.velProm,s.velMax==null?'':s.velMax,s.ubicIni||'',s.ubicFin||'',s.ralentiH,(S.satLotes.find(l=>l.id===s.lote)||{}).archivo||'']));W['Informes cargados']=TT(['Archivo','Cargado','Registros','Enlace Drive'],S.satLotes.map(l=>[l.archivo,l.fecha,S.satrack.filter(s=>s.lote===l.id).length,l.url||'']))}
  if(sec==='gerencial'){
   const a=agg(per,modo);W['Indicadores']=TT(['Indicador','Valor'],[['Base de km',bn],['Períodos',a.n],['Km',a.km],['Galones',a.gal],['Gal/km',a.galkm],['Km/gal',a.kmgal],['Desviación %',a.desv],['Sobreconsumo gal',a.sobreGal],['Sobreconsumo $',a.sobreCosto],['Costo/km',a.costoKm],['Viajes',a.nViajes],['Costo/viaje',a.costoViaje]]);
   [['dia','Día'],['mes','Mes'],['conductor','Conductor'],['ruta','Ruta'],['vehiculo','Vehículo']].forEach(([d,n])=>W['Por '+n.toLowerCase()]=TT([n,'Gal. consumidos','Gasto','Km','Costo/km','Viajes',...REFS.flatMap(r=>['Dif. gal vs '+r[1],'Dif. % vs '+r[1]]),'Sobreconsumo $ (odómetro)'],analisisDim(per,d,modo).map(g=>[d==='mes'||d==='dia'?g.k:g.k,g.gal,g.galP>0?g.costo:null,g.km,g.kmP>0?g.costo/g.kmP:null,g.nV,...REFS.flatMap(r=>{const x=g.ref[r[0]];return x?[x.real-x.esp,x.esp>0?(x.real-x.esp)/x.esp*100:null]:[null,null]}),sobre$(g)])));
@@ -2335,7 +2336,7 @@ async function satPdfAbrir(files){
 function spRender(){
   const o=$('#sp-out');if(!SP.length){o.innerHTML='';return}
   const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].sort();
-  o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Intervalo entre tanqueos</th><th class="n">Km recorridos *</th><th class="n">Ralentí (h)</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
+  o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Intervalo entre tanqueos</th><th class="n">Km recorridos <span class="small muted">(solo si no hay informe Excel/API en el intervalo)</span></th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
     return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':r.km!=null?'good':'muted'}">${r.aviso?esc(r.aviso):(r.km!=null?'Km leídos del PDF: verifíquelos':'No se detectaron km: digítelos')}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
     <td><select data-sp="placa" data-i="${i}"><option value="">—</option>${pls.map(p=>`<option ${p===r.placa?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
     <td><select data-sp="key" data-i="${i}"><option value="">— Seleccione —</option>${iv.map(x=>`<option value="${esc(x.key)}" ${x.key===r.key?'selected':''}>${esc(x.txt)}</option>`).join('')}<option value="__m" ${r.key==='__m'?'selected':''}>Otro intervalo (manual)</option></select>${r.key==='__m'?`<div class="row" style="margin-top:6px"><input type="datetime-local" data-sp="mt0" data-i="${i}" value="${esc(r.mt0)}"><input type="datetime-local" data-sp="mt1" data-i="${i}" value="${esc(r.mt1)}"></div>`:''}</td>
@@ -2351,21 +2352,27 @@ function spRender(){
 async function spGuardar(){
   const listo=[];
   for(const r of SP){
-    if(!r.placa||!r.key||r.km==null||r.km<0)return toast('Complete vehículo, intervalo y km en «'+r.nombre+'»');
+    if(!r.placa||!r.key)return toast('Complete vehículo e intervalo en «'+r.nombre+'»');
     let t0,t1,txt;
     if(r.key==='__m'){t0=r.mt0?new Date(r.mt0).getTime():NaN;t1=r.mt1?new Date(r.mt1).getTime():NaN;if(isNaN(t0)||isNaN(t1)||t1<=t0)return toast('Indique un intervalo manual válido en «'+r.nombre+'»');txt=fT(t0)+' → '+fT(t1)}
     else{const iv=spIntervalos(r.placa).find(x=>x.key===r.key);if(!iv)return toast('El intervalo elegido en «'+r.nombre+'» ya no existe');t0=iv.t0;t1=iv.t1;txt=iv.txt}
-    listo.push({r,t0,t1,txt})}
-  const dentro=(l,s)=>s.placa===l.r.placa&&satMid(s)>l.t0&&satMid(s)<=l.t1,choques=listo.reduce((n,l)=>n+S.satrack.filter(s=>dentro(l,s)).length,0);
-  if(choques&&!confirm('En los intervalos elegidos ya hay '+choques+' registro(s) de Satrack (informe o API). Se reemplazarán por los km de los PDF para no duplicar. ¿Continuar?'))return;
+    /* registros de Satrack ya cargados (Excel/API/PDF previo con km) en el intervalo: no se tocan */
+    const base=S.satrack.filter(x=>x.placa===r.placa&&satMid(x)>t0&&satMid(x)<=t1&&!x.soloRal);
+    if(base.length){if(r.ral==null||r.ral<0)return toast('Indique el ralentí de «'+r.nombre+'»')}
+    else if(r.km==null||r.km<0)return toast('En «'+r.nombre+'» no hay informe de Satrack en ese intervalo: indique los km recorridos')
+    listo.push({r,t0,t1,txt,soloRal:base.length>0})}
+  let nR=0,nK=0;
   for(const l of listo){
-    S.satrack=S.satrack.filter(s=>!dentro(l,s));
+    const dentro=x=>x.placa===l.r.placa&&satMid(x)>l.t0&&satMid(x)<=l.t1;
+    S.satrack=S.satrack.filter(x=>!(dentro(x)&&(l.soloRal?x.soloRal:true)));
     const lote=uid();
-    S.satLotes.push({id:lote,archivo:l.r.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:l.r.placa+' · '+l.txt});
-    S.satrack.push({id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:l.r.km,ralentiH:l.r.ral,lote});
+    S.satLotes.push({id:lote,archivo:l.r.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:l.r.placa+' · '+l.txt+(l.soloRal?' · solo ralentí':'')});
+    S.satrack.push(l.soloRal?{id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:0,ralentiH:l.r.ral,lote,soloRal:true}:{id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:l.r.km,ralentiH:l.r.ral,lote});
+    l.soloRal?nR++:nK++;
     try{await fPut('satpdf:'+lote,l.r.file)}catch(e){}
     subirArchivoSat(lote,l.r.file)}
-  SP=[];save();renderAll();spRender();toast(listo.length+' estadística(s) de Satrack guardada(s) y asignada(s) a su intervalo')}
+  S.satLotes=S.satLotes.filter(x=>!x.pdf||S.satrack.some(y=>y.lote===x.id));
+  SP=[];save();renderAll();spRender();toast((nR?nR+' ralentí(es) actualizado(s) sin modificar los km del informe Excel/API':'')+(nR&&nK?'; ':'')+(nK?nK+' estadística(s) guardada(s) con km del PDF (intervalo sin registros de Satrack)':''))}
 async function spVer(id){
   let f=null;try{f=await fGet('satpdf:'+id)}catch(e){}
   if(f){const u=URL.createObjectURL(f);window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),60000)}
