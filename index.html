@@ -194,6 +194,12 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     </form>
   </div>
   <div class="card">
+    <h2>Totales de tanqueo por vehículo</h2>
+    <div class="row" style="margin-bottom:8px"><label class="small" style="margin:0">Período</label><select id="tt-mes" style="width:auto"></select></div>
+    <div class="wrap"><table class="tbl" id="tbl-tanq-tot"></table></div>
+    <p class="muted small">Los totales se actualizan con cada tanqueo que se registra, edita o borra. El valor en pesos suma galones × precio por galón de los tanqueos que tienen precio; los que no lo tienen se cuentan en galones pero no en pesos.</p>
+  </div>
+  <div class="card">
     <h2>Registros de tanqueo</h2>
     <div class="wrap"><table class="tbl" id="tbl-tanqueos"></table></div>
   </div>
@@ -992,8 +998,23 @@ function renderListas(){
   $('#dl-placas').innerHTML=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].map(p=>`<option value="${esc(p)}">`).join('');
   $('#dl-cond').innerHTML=S.conductores.map(c=>`<option value="${esc(c.nombre)}">`).join('');
 }
+function totalesTanqueo(mes){
+  const G={},T={n:0,gal:0,tot:0,galP:0,sp:0};
+  S.tanqueos.filter(r=>!mes||r.fecha.startsWith(mes)).forEach(r=>{
+    const g=G[r.placa]=G[r.placa]||{n:0,gal:0,tot:0,galP:0,sp:0},gl=r.gal||0;
+    [g,T].forEach(x=>{x.n++;x.gal+=gl;if(isNum(r.precio)){x.tot+=gl*r.precio;x.galP+=gl}else x.sp++});
+  });
+  return{G,T};
+}
+function renderTotalesTanqueo(){
+  const sel=$('#tt-mes'),cur=sel.value,ms=[...new Set(S.tanqueos.map(r=>r.fecha.slice(0,7)))].sort().reverse();
+  sel.innerHTML='<option value="">Todo el histórico</option>'+ms.map(m=>`<option value="${m}">${esc(mesTxt(m))}</option>`).join('');if(ms.includes(cur))sel.value=cur;
+  const {G,T}=totalesTanqueo(sel.value),fila=(nom,x,tot)=>`<tr${tot?' class="tot"':''}><td>${tot?'TOTAL FLOTA':'<b>'+esc(nom)+'</b>'}</td><td class="n">${x.n}</td><td class="n">${fmtG(x.gal)}</td><td class="n">${x.galP>0?money(x.tot):'—'}${x.sp?` <span class="muted small">(${x.sp} sin precio)</span>`:''}</td><td class="n">${x.galP>0?money(x.tot/x.galP):'—'}</td></tr>`;
+  $('#tbl-tanq-tot').innerHTML=T.n?'<tr><th>Vehículo</th><th class="n">Tanqueos</th><th class="n">Galones totales</th><th class="n">Consumo total ($)</th><th class="n">Precio prom./gal</th></tr>'+Object.keys(G).sort().map(k=>fila(k,G[k])).join('')+fila('',T,true):'<tr><td class="muted">Aún no hay tanqueos registrados.</td></tr>';
+  sel.onchange=renderTotalesTanqueo;
+}
 function renderTanqueos(){
-  renderListas();
+  renderListas();renderTotalesTanqueo();
   const all=analisisTodo(),rs=[...S.tanqueos].sort((a,b)=>dtT(b)-dtT(a));
   $('#tbl-tanqueos').innerHTML=rs.length?`<tr><th>Fecha / hora</th><th>Vehículo</th><th>Conductor</th><th class="n">Odómetro</th><th class="n">Galones</th><th>N.º tirilla</th><th class="n">Precio/gal</th><th class="n">Total</th><th>Full</th><th class="n">Satrack (int.)</th><th class="n">Ralentí h</th><th>Fotos</th><th>Alertas</th><th></th></tr>`+
   rs.map(r=>{const fl=(all[r.placa]&&all[r.placa].flags[r.id])||[];
@@ -1973,6 +1994,7 @@ function libro(sec){
   [['conductor','cond'],['ruta','ruta']].forEach(([n,d])=>W['Por '+n]=TT([n,'Viajes','Km estándar','Gal. atribuidos','Gal. aprox. rutas','Dif. gal','Dif. %','Costo atribuido'],agruparPor(per,d,modo).map(g=>[g.k,g.n,g.km,g.gal,g.galAprox||null,g.galAprox>0?g.gal-g.galAprox:null,g.galAprox>0?(g.gal-g.galAprox)/g.galAprox*100:null,g.galP>0?g.costo:null])));
  }
  if(sec==='tanqueos')W['Tanqueos']=TT(['Fecha','Hora','Placa','Conductor','Odómetro','Galones','N.º tirilla (remisión)','Precio/gal','Total','Full','Km Satrack (int.)','Ralentí h','Alertas','Observaciones'],[...S.tanqueos].sort((a,b)=>dtT(a)-dtT(b)).map(r=>{const fl=(A[r.placa]&&A[r.placa].flags[r.id])||[];return[r.fecha,r.hora,r.placa,r.conductor,r.odo,r.gal,r.tirilla||'',r.precio,isNum(r.precio)?r.gal*r.precio:null,r.full?'Sí':'No',num(r.satKm),num(r.ralentiH),fl.map(x=>x.c).join('; '),r.obs]}));
+ if(sec==='tanqueos'){const {G,T}=totalesTanqueo('');W['Totales por vehículo']=TT(['Vehículo','Tanqueos','Galones totales','Consumo total ($)','Precio prom./gal','Tanqueos sin precio'],[...Object.keys(G).sort().map(k=>[k,G[k].n,+G[k].gal.toFixed(3),Math.round(G[k].tot),G[k].galP>0?Math.round(G[k].tot/G[k].galP):'',G[k].sp]),['TOTAL FLOTA',T.n,+T.gal.toFixed(3),Math.round(T.tot),T.galP>0?Math.round(T.tot/T.galP):'',T.sp]])}
  if(sec==='viajes'){
   const vs=[...S.viajes].sort((a,b)=>dtV(a)-dtV(b));
   W['Viajes']=TT(['Salida','Placa','Conductor','Ruta','Remisión','N.º viajes','Km estándar','Odómetro ini','Odómetro fin','Km Satrack','Gal. aprox.'],vs.map(v=>[v.salida.replace('T',' '),v.placa,v.conductor,v.ruta,v.remision,nV(v),kmViaje(v),v.odoIni,v.odoFin,v.satKm,galViaje(v)]));
