@@ -235,7 +235,10 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
   </div>
   <div class="card">
     <h2>Rutas realizadas por día y vehículo</h2>
+    <p class="muted small" style="margin-top:0">Cada día se cruza con el <b>informe diario de Satrack</b> (km recorridos ese día) y con el <b>odómetro del preoperacional</b>: los km preoperacionales son la medición inicial del día siguiente (medición posterior) menos la medición inicial de ese día.</p>
+    <div class="row" style="margin-bottom:8px"><select id="vd-mes" style="width:auto"></select><select id="vd-placa" style="width:auto"></select></div>
     <div id="viajes-dia"></div>
+    <p class="muted small" id="vd-nota"></p>
   </div>
   <div class="card">
     <h2>Distancia por viaje</h2>
@@ -1105,16 +1108,52 @@ function renderViajes(){
   const vs=[...S.viajes].sort((a,b)=>dtV(b)-dtV(a));
   renderRutaSelect();
   $('#viajes-host').innerHTML=vs.length?tablaViajes(vs,true):'<p class="muted">Aún no hay viajes registrados.</p>';
-  $('#viajes-dia').innerHTML=resumenDia(vs)||'<p class="muted">Aún no hay viajes registrados.</p>';
+  renderViajesDia();
   $$('#tab-viajes [data-ev]').forEach(b=>b.onclick=()=>editarViaje(b.dataset.ev));
   $$('#tab-viajes [data-dv]').forEach(b=>b.onclick=()=>{if(confirm('¿Borrar este viaje?')){S.viajes=S.viajes.filter(x=>x.id!==b.dataset.dv);save();renderAll()}});
 }
-function resumenDia(vs){
-  if(!vs.length)return '';
-  const g={};vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;(g[k]=g[k]||[]).push(v)});
-  return `<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th class="n">Rutas</th><th class="n">Viajes</th><th>Rutas y remisiones</th><th class="n">Km estándar</th><th class="n">Gal. aprox.</th></tr>`+
-  Object.keys(g).sort().reverse().map(k=>{const a=g[k],[f,pl]=k.split('|');
-    return `<tr><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td class="n">${a.length}</td><td class="n">${a.reduce((s,v)=>s+nV(v),0)}</td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}</td><td class="n">${fmt(a.reduce((s,v)=>s+kmViaje(v),0),1)}</td><td class="n">${fmt(a.reduce((s,v)=>s+galViaje(v),0),1)}</td></tr>`}).join('')+`</table></div>`;
+/* ---------- Cruce diario: viajes + informe diario de Satrack + odómetro preoperacional ---------- */
+const dIso=t=>{const d=new Date(t);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const nivKm=(pct,t)=>pct==null?null:Math.abs(pct)<=t?'ok':Math.abs(pct)<=t*(S.config.critFactor||2)?'warn':'crit';
+function crucePorDia(){
+  const R=new Map(),get=(d,pl)=>{const k=d+'|'+pl;if(!R.has(k))R.set(k,{fecha:d,placa:pl,vs:[],kmSat:null,kA:null,kB:null,dB:null,kmPre:null});return R.get(k)};
+  S.viajes.forEach(v=>{if(v.salida&&v.placa)get(v.salida.slice(0,10),v.placa).vs.push(v)});
+  /* Satrack: solo registros diarios (informe Excel o API); los de intervalo/PDF no se asignan a un día */
+  S.satrack.forEach(x=>{if(x.soloRal||!isNum(x.km)||!(x.t1-x.t0<DIA))return;const o=get(dIso(x.t0),x.placa);o.kmSat=(o.kmSat||0)+x.km});
+  /* Preoperacional: medición inicial del día → medición inicial del día siguiente con medición */
+  const por={};S.preop.forEach(r=>{if(r.salida&&r.placa&&num(r.km)!=null)(por[r.placa]=por[r.placa]||[]).push(r)});
+  Object.keys(por).forEach(pl=>{const dias=new Map();
+    [...por[pl]].sort((a,b)=>dtP(a)-dtP(b)).forEach(r=>{const d=r.salida.slice(0,10);if(!dias.has(d))dias.set(d,r)});
+    const L=[...dias.entries()];
+    L.forEach(([d,A],i)=>{const o=get(d,pl);o.kA=num(A.km);const nx=L[i+1];if(nx){o.kB=num(nx[1].km);o.dB=nx[0];o.kmPre=o.kB-o.kA}})});
+  const tS=S.config.tolPct,tP=S.config.tolPreop,sumKm=a=>a.reduce((x,v)=>x+kmViaje(v),0);
+  return [...R.values()].filter(o=>o.vs.length||o.kmSat>0||(o.kmPre!=null&&o.kmPre!==0)).map(o=>{
+    const kmV=sumKm(o.vs),galV=o.vs.reduce((x,v)=>x+galViaje(v),0),nVi=o.vs.reduce((x,v)=>x+nV(v),0),
+      gap=o.dB?Math.round((Date.parse(o.dB)-Date.parse(o.fecha))/DIA):0,
+      kmVp=gap>1?sumKm(S.viajes.filter(v=>v.placa===o.placa&&v.salida.slice(0,10)>=o.fecha&&v.salida.slice(0,10)<o.dB)):kmV,
+      dS=(o.kmSat!=null&&kmV>0)?o.kmSat-kmV:null,pS=dS!=null?dS/kmV*100:null,
+      dP=(o.kmPre!=null&&kmVp>0)?o.kmPre-kmVp:null,pP=dP!=null?dP/kmVp*100:null,obs=[],
+      hayS=S.satrack.some(x=>x.placa===o.placa&&!x.soloRal&&x.t1-x.t0<DIA),hayP=S.preop.some(x=>x.placa===o.placa);
+    if(!o.vs.length)obs.push('Sin viajes registrados ese día'+(o.kmSat>0?' (Satrack: '+fmt(o.kmSat,1)+' km)':''));
+    if(o.vs.length&&hayS&&o.kmSat==null)obs.push('Sin km de Satrack ese día');
+    if(o.vs.length&&hayP&&o.kA==null)obs.push('Sin medición preoperacional ese día');
+    if(o.kA!=null&&o.kB==null)obs.push('Falta la medición inicial del día siguiente');
+    if(o.kmPre!=null&&o.kmPre<0)obs.push('El odómetro del día siguiente es menor que el inicial');
+    if(gap>1)obs.push('La siguiente medición es del '+fd(o.dB)+' ('+gap+' días): se comparan los km con los viajes de esos días ('+fmt(kmVp,1)+' km)');
+    return{...o,kmV,galV,nVi,gap,kmVp,dS,pS,dP,pP,nS:nivKm(pS,tS),nP:nivKm(pP,tP),obs:obs.join(' · ')}});
+}
+function renderViajesDia(){
+  const all=crucePorDia(),sm=$('#vd-mes'),sp=$('#vd-placa'),cm=sm.value,cp=sp.value,
+    ms=[...new Set(all.map(r=>r.fecha.slice(0,7)))].sort().reverse(),pls=[...new Set(all.map(r=>r.placa))].sort();
+  sm.innerHTML='<option value="">Todos los meses</option>'+ms.map(m=>`<option value="${m}">${esc(mesTxt(m))}</option>`).join('');if(ms.includes(cm))sm.value=cm;
+  sp.innerHTML='<option value="">Todos los vehículos</option>'+pls.map(x=>`<option>${esc(x)}</option>`).join('');if(pls.includes(cp))sp.value=cp;
+  sm.onchange=sp.onchange=renderViajesDia;
+  const V=all.filter(r=>(!sm.value||r.fecha.startsWith(sm.value))&&(!sp.value||r.placa===sp.value)).sort((a,b)=>a.fecha<b.fecha?1:a.fecha>b.fecha?-1:a.placa<b.placa?-1:1);
+  const dif=(d,pc,n)=>d==null?'—':chip(n,(d>0?'+':'')+fmt(d,1)+' km · '+sg(pc,1));
+  $('#viajes-dia').innerHTML=V.length?`<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th class="n">Rutas</th><th class="n">Viajes</th><th>Rutas y remisiones</th><th class="n">Km viajes<div class="small muted">ruta estándar</div></th><th class="n">Km Satrack<div class="small muted">informe diario</div></th><th class="n">Satrack vs viajes</th><th class="n">Odómetro inicial<div class="small muted">preoperacional</div></th><th class="n">Odómetro día siguiente<div class="small muted">medición posterior</div></th><th class="n">Km preop.<div class="small muted">posterior − inicial</div></th><th class="n">Preop. vs viajes</th><th class="n">Gal. aprox.</th><th>Observaciones</th></tr>`+
+    V.map(r=>`<tr><td>${fd(r.fecha)}</td><td><b>${esc(r.placa)}</b></td><td class="n">${r.vs.length||'—'}</td><td class="n">${r.nVi||'—'}</td><td>${r.vs.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')||'<span class="muted">—</span>'}</td><td class="n">${r.vs.length?fmt(r.kmV,1):'—'}</td><td class="n">${r.kmSat==null?'—':fmt(r.kmSat,1)}</td><td class="n">${dif(r.dS,r.pS,r.nS)}</td><td class="n">${r.kA==null?'—':fmt(r.kA)}</td><td class="n">${r.kB==null?'—':fmt(r.kB)+'<div class="small muted">'+fd(r.dB)+'</div>'}</td><td class="n">${r.kmPre==null?'—':fmt(r.kmPre)}</td><td class="n">${dif(r.dP,r.pP,r.nP)}</td><td class="n">${r.vs.length?fmt(r.galV,1):'—'}</td><td class="small">${esc(r.obs)}</td></tr>`).join('')+`</table></div>`
+    :'<p class="muted">Aún no hay viajes, informe diario de Satrack ni mediciones preoperacionales para cruzar.</p>';
+  $('#vd-nota').textContent='Km viajes = km de la ruta estándar × viajes registrados ese día. Km Satrack = km del informe diario importado (Excel o API). Km preop. = odómetro de la primera medición preoperacional del día siguiente menos el de la primera medición del día. Margen de error: Satrack '+fmt(S.config.tolPct,0)+' % y preoperacional '+fmt(S.config.tolPreop,0)+' % (Configuración): dentro del margen = verde, hasta el doble = amarillo, más allá = rojo. Se muestran también los días con km de Satrack o de odómetro pero sin viajes.';
 }
 function renderRutaSelect(){
   const sel=$('#v-ruta'),cur=sel.value;
@@ -1999,9 +2038,8 @@ function libro(sec){
  if(sec==='viajes'){
   const vs=[...S.viajes].sort((a,b)=>dtV(a)-dtV(b));
   W['Viajes']=TT(['Salida','Placa','Conductor','Ruta','Remisión','N.º viajes','Km estándar','Odómetro ini','Odómetro fin','Km Satrack','Gal. aprox.'],vs.map(v=>[v.salida.replace('T',' '),v.placa,v.conductor,v.ruta,v.remision,nV(v),kmViaje(v),v.odoIni,v.odoFin,v.satKm,galViaje(v)]));
-  const g={};vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;const o=g[k]=g[k]||{n:0,km:0,gal:0,r:[]};o.n+=nV(v);o.km+=kmViaje(v);o.gal+=galViaje(v);o.r.push(v.ruta+' ×'+nV(v))});
-  W['Resumen por día']=TT(['Fecha','Placa','Viajes','Rutas','Km estándar','Gal. aprox.'],Object.keys(g).sort().map(k=>[k.split('|')[0],k.split('|')[1],g[k].n,g[k].r.join(' + '),g[k].km,g[k].gal]))}
- if(sec==='preop')W['Preop vs viajes']=preopExport();
+  W['Resumen por día']=TT(['Fecha','Placa','Viajes','Rutas','Km viajes (ruta estándar)','Km Satrack (informe diario)','Dif. km Satrack vs viajes','Dif. % Satrack vs viajes','Odómetro inicial (preop.)','Fecha medición posterior','Odómetro medición posterior','Km preoperacional (posterior − inicial)','Dif. km preop. vs viajes','Dif. % preop. vs viajes','Gal. aprox.','Observaciones'],
+   crucePorDia().sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:a.placa<b.placa?-1:1).map(r=>[r.fecha,r.placa,r.nVi,r.vs.map(v=>v.ruta+' ×'+nV(v)).join(' + '),r.vs.length?r.kmV:'',r.kmSat==null?'':r.kmSat,r.dS==null?'':r.dS,r.pS==null?'':r.pS,r.kA==null?'':r.kA,r.dB||'',r.kB==null?'':r.kB,r.kmPre==null?'':r.kmPre,r.dP==null?'':r.dP,r.pP==null?'':r.pP,r.vs.length?r.galV:'',r.obs]))} if(sec==='preop')W['Preop vs viajes']=preopExport();
  if(sec==='preop')W['Preoperacional']=TT(['Salida','Placa','Conductor','Km medición','Combustible con regla (gal)','Observación'],[...S.preop].sort((a,b)=>dtP(a)-dtP(b)).map(r=>[r.salida.replace('T',' '),r.placa,r.conductor,r.km,isNum(r.galIni)?+r.galIni:null,r.obs]));
  if(sec==='facturas')W['Totales por mes']=totMesExport();
  if(sec==='facturas')W['Facturas vs tanqueos']=TT(['Estado','Factura','Proveedor','NIT','Fecha factura','Placa','Gal. factura','Valor factura','Fecha tanqueo','Gal. tanqueo','Dif. gal','Dif. %','Dif. valor','Observaciones'],conciliarFac().map(r=>{const f=r.f||{},t=r.t||{};return[r.e,f.factura,f.proveedor,f.nit,f.fecha,f.placa||t.placa,f.gal,f.valor,t.fecha?t.fecha+' '+(t.hora||''):'',t.gal,r.dg,r.pg,r.dv,r.obs]}));
