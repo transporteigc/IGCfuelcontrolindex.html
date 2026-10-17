@@ -979,11 +979,11 @@ function detalleHTML(p){
 
 function tablaViajes(vs,acciones){
   /* Conciliación (sin acciones): sin columnas de km medidos; se muestra el consumo estimado de galones con km Satrack y con km de odómetro,
-     usando el consumo de la ruta del viaje (gal. aprox. ÷ km estándar). Pestaña Viajes (con acciones): tabla completa de siempre. */
+     usando el consumo estándar (gal/km) del vehículo definido en Configuración. Pestaña Viajes (con acciones): tabla completa de siempre. */
   if(!acciones){
-    return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × consumo de la ruta</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km odómetro × consumo de la ruta</div></th></tr>`+
+    return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km) del vehículo</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km odómetro × estándar (gal/km) del vehículo</div></th></tr>`+
     vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,sk=num(v.satKm),std=kmViaje(v),gv=galViaje(v),
-      tasa=std>0?gv/std:vehiculo(v.placa).std,gS=sk!=null&&tasa>0?sk*tasa:null,gO=o!=null&&o>=0&&tasa>0?o*tasa:null,
+      tasa=vehiculo(v.placa).std,gS=sk!=null&&tasa>0?sk*tasa:null,gO=o!=null&&o>=0&&tasa>0?o*tasa:null,
       cel=(g,km)=>g==null?'—':`${fmt(g,1)} gal<div class="small muted">${fmt(km,1)} km${gv>0?' · '+sgal(g-gv):''}</div>`;
       return `<tr><td>${fdt(v.salida)}</td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${fmt(std,1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${cel(gS,sk)}</td><td class="n">${cel(gO,o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td></tr>`}).join('')+`</table></div>`;
   }
