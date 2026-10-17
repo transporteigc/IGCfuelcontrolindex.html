@@ -978,10 +978,19 @@ function detalleHTML(p){
 }
 
 function tablaViajes(vs,acciones){
-  return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th>${acciones?'<th></th>':''}</tr>`+
+  /* Conciliación (sin acciones): sin columnas de km medidos; se muestra el consumo estimado de galones con km Satrack y con km de odómetro,
+     usando el consumo de la ruta del viaje (gal. aprox. ÷ km estándar). Pestaña Viajes (con acciones): tabla completa de siempre. */
+  if(!acciones){
+    return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × consumo de la ruta</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km odómetro × consumo de la ruta</div></th></tr>`+
+    vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,sk=num(v.satKm),std=kmViaje(v),gv=galViaje(v),
+      tasa=std>0?gv/std:vehiculo(v.placa).std,gS=sk!=null&&tasa>0?sk*tasa:null,gO=o!=null&&o>=0&&tasa>0?o*tasa:null,
+      cel=(g,km)=>g==null?'—':`${fmt(g,1)} gal<div class="small muted">${fmt(km,1)} km${gv>0?' · '+sgal(g-gv):''}</div>`;
+      return `<tr><td>${fdt(v.salida)}</td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${fmt(std,1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${cel(gS,sk)}</td><td class="n">${cel(gO,o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td></tr>`}).join('')+`</table></div>`;
+  }
+  return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th><th></th></tr>`+
   vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),std=kmViaje(v);
     const dO=o!=null&&std>0?(o-std)/std*100:null,dS=s!=null&&std>0?(s-std)/std*100:null;
-    return `<tr><td>${fdt(v.salida)}${acciones?'<br><b>'+esc(v.placa)+'</b>'+(v.conductor?' · '+esc(v.conductor):''):''}</td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${fmt(std,1)}</td><td class="n">${o==null?'—':fmt(o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td><td class="n">${fmt(s,1)}</td><td class="n">${sg(dO)}</td><td class="n">${sg(dS)}</td><td class="n">${fmt(galViaje(v),1)}</td>${acciones?`<td class="n"><button class="btn sec sm" data-ev="${v.id}">Editar</button> <button class="btn sec sm" data-dv="${v.id}">Borrar</button></td>`:''}</tr>`}).join('')+`</table></div>`;
+    return `<tr><td>${fdt(v.salida)}<br><b>${esc(v.placa)}</b>${v.conductor?' · '+esc(v.conductor):''}</td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${fmt(std,1)}</td><td class="n">${o==null?'—':fmt(o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td><td class="n">${fmt(s,1)}</td><td class="n">${sg(dO)}</td><td class="n">${sg(dS)}</td><td class="n">${fmt(galViaje(v),1)}</td><td class="n"><button class="btn sec sm" data-ev="${v.id}">Editar</button> <button class="btn sec sm" data-dv="${v.id}">Borrar</button></td></tr>`}).join('')+`</table></div>`;
 }
 
 /* ===================== Render: tanqueos ===================== */
