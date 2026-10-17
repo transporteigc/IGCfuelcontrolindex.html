@@ -140,6 +140,13 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     <div class="wrap"><table class="tbl" id="tbl-periodos"></table></div>
     <div id="vacio-periodos" class="muted"></div>
   </div>
+  <div class="card">
+    <h2>Alertas de consumo por ruta</h2>
+    <p class="muted small" style="margin-top:0">Compara los galones reales de cada período con lo esperado para las rutas realizadas (galonaje de las rutas + ralentí). Avisa cuando el vehículo consumió <b>más o menos</b> de lo esperado (tolerancia de consumo y de repetición de Configuración) y, en rutas repetidas, frente a otros períodos de la misma ruta. Junto a cada alerta se listan factores que suelen explicar la variación: ralentí, velocidad (informe de Satrack), conductor y diferencia de km. Son señales para revisar, no conclusiones; la app no tiene datos de arrancadas o frenadas bruscas, esos se consultan en el reporte de eventos de Satrack.</p>
+    <div id="alertas-ruta"></div>
+    <h3>Consumo por ruta</h3>
+    <div class="wrap"><table class="tbl" id="tbl-rutas-cons"></table></div>
+  </div>
   <div id="detalle"></div>
 </section>
 
@@ -647,6 +654,7 @@ function analizarPlaca(placa){
     const ks=Object.keys(gr).sort();
     p.firma=ks.length?ks.map(x=>x+'×'+gr[x].n).join('+'):null;
     p.firmaTxt=ks.map(x=>gr[x].nombre+' ×'+gr[x].n).join(', ');
+    p.rutaUnica=ks.length===1?ks[0]:null;p.rutaNombre=ks.length===1?gr[ks[0]].nombre:null;
     per.push(p);
   }
   const pcts=per.map(p=>p.difPct);
@@ -803,6 +811,66 @@ function agruparPor(per,dim,modo){
   });
   return Object.values(G).sort((a,b)=>b.gal-a.gal);
 }
+/* ---------- Consumo total del período = km base × estándar + ralentí (h × gal/h) ---------- */
+function consTotal(p,modo){
+  const k=kmBase(p,modo||S.config.baseKm);if(!k)return null;
+  const rod=k*p.veh.std,gr=(p.ralentiH!=null&&p.veh.ralenti!=null)?p.ralentiH*p.veh.ralenti:null,tot=rod+(gr||0);
+  return{k,rod,gr,tot,dif:p.gal-tot,pct:tot>0?(p.gal-tot)/tot*100:null};
+}
+const condPer=p=>{const c=new Set();p.viajes.forEach(v=>v.conductor&&c.add(v.conductor));if(!c.size){[p.A,p.B].forEach(r=>r.conductor&&c.add(r.conductor))}return[...c]};
+function velPer(p){/* velocidad del informe diario de Satrack dentro del período (ponderada por km) */
+  const t0=dtT(p.A),t1=dtT(p.B),a=S.satrack.filter(x=>x.placa===p.placa&&!x.soloRal&&isNum(x.velProm)&&satMid(x)>t0&&satMid(x)<=t1);
+  if(!a.length)return null;const w=a.reduce((x,r)=>x+(r.km||0),0)||a.length;
+  return{prom:a.reduce((x,r)=>x+r.velProm*((r.km||0)||1),0)/w,max:Math.max(...a.map(r=>isNum(r.velMax)?r.velMax:0))};
+}
+/* ---------- Alertas de consumo por ruta: ¿gastó más o menos combustible de lo esperado para sus rutas? ---------- */
+function alertasRuta(per){
+  const tc=S.config.tolConsumo,tr=S.config.tolRepeticion,out=[];
+  const vels=per.map(p=>({p,v:velPer(p)})),flotaV=vels.filter(x=>x.v).map(x=>x.v.prom),vMed=flotaV.length>=2?median(flotaV):null;
+  /* esperado por rutas (+ ralentí) y desviación de cada período */
+  const base=per.filter(p=>p.viajes.length&&p.galAprox>0&&p.gal>0).map(p=>{
+    const gr=(p.ralentiH!=null&&p.veh.ralenti!=null)?p.ralentiH*p.veh.ralenti:null,esp=p.galAprox+(gr||0);
+    return{p,gr,esp,dev:(p.gal-esp)/esp*100,vel:velPer(p),cond:condPer(p)}});
+  /* promedio de desviación por conductor (estilo de manejo): solo si tiene ≥2 períodos */
+  const porC={};base.forEach(b=>b.cond.forEach(c=>{(porC[c]=porC[c]||[]).push(b.dev)}));
+  const devFlota=base.length?avg(base.map(b=>b.dev)):0;
+  /* referencia por ruta única: gal por viaje (sin ralentí) de los demás períodos de esa misma ruta */
+  const galViajeP=b=>(b.p.gal-(b.gr||0))/b.p.nViajes;
+  base.forEach(b=>{
+    const p=b.p,key=p.placa+'|'+p.B.id,ref=p.placa+' · '+fd(p.A.fecha)+' – '+fd(p.B.fecha);
+    let peer=null;
+    if(p.rutaUnica&&p.nViajes>0){const otros=base.filter(o=>o!==b&&o.p.rutaUnica===p.rutaUnica&&o.p.nViajes>0).map(galViajeP);
+      if(otros.length>=2){const m=median(otros),mine=galViajeP(b);if(m>0)peer={m,mine,pct:(mine-m)/m*100,n:otros.length}}}
+    const alertaEsp=Math.abs(b.dev)>tc,alertaPeer=peer&&Math.abs(peer.pct)>tr;
+    if(!alertaEsp&&!alertaPeer)return;
+    const mas=(alertaEsp?b.dev:peer.pct)>0,fac=[];
+    if(p.ralentiH!=null){const share=b.gr!=null&&p.gal>0?b.gr/p.gal*100:null;fac.push('ralentí '+fmt(p.ralentiH,1)+' h'+(b.gr!=null?' ('+fmt(b.gr,1)+' gal'+(share!=null?', '+fmt(share,0)+' % del combustible':'')+')':''))}
+    else fac.push('sin horas de ralentí registradas (el ralentí puede explicar parte de la diferencia)');
+    if(b.vel){fac.push('velocidad promedio '+fmt(b.vel.prom,0)+' km/h, máx. '+fmt(b.vel.max,0)+' km/h'+(vMed!=null?(b.vel.prom>vMed*1.1?' (por encima de la mediana de la flota, '+fmt(vMed,0)+' km/h)':b.vel.prom<vMed*0.9?' (por debajo de la mediana de la flota, '+fmt(vMed,0)+' km/h)':' (similar a la flota)'):''))}
+    b.cond.forEach(c=>{const L=porC[c];if(L.length>=2){const m=avg(L);fac.push('conductor '+c+': desviación promedio '+(m>0?'+':'')+fmt(m,1)+' % en '+L.length+' períodos'+(Math.abs(m-devFlota)>5?(m>devFlota?' (más alta que la flota)':' (más baja que la flota)'):' (similar a la flota)'))}else fac.push('conductor '+c)});
+    if(p.difPct!=null&&p.difPct>S.config.tolPct)fac.push('diferencia de km odómetro vs Satrack de '+fmt(p.difPct,1)+' %');
+    const n=Math.abs(alertaEsp?b.dev:peer.pct)>(alertaEsp?tc:tr)*2?'crit':'warn';
+    const t=ref+' · '+(p.rutaNombre||p.firmaTxt)+' · Consumo '+(mas?'MAYOR':'MENOR')+' al esperado: '+fmt(p.gal,1)+' gal reales vs '+fmt(b.esp,1)+' esperados ('+(b.gr!=null?'rutas '+fmt(p.galAprox,1)+' + ralentí '+fmt(b.gr,1):'rutas '+fmt(p.galAprox,1)+', sin ralentí')+') = '+(b.dev>0?'+':'')+fmt(b.dev,1)+' %.'
+      +(alertaPeer?' En la misma ruta, otros períodos consumieron '+fmt(peer.m,1)+' gal por viaje (mediana de '+peer.n+' períodos) y este '+fmt(peer.mine,1)+' ('+(peer.pct>0?'+':'')+fmt(peer.pct,1)+' %).':'');
+    const rec=mas?'Revisar: velocidad y arrancadas/frenadas bruscas (reporte de eventos de conducción de Satrack), tiempo en ralentí, estilo de manejo del conductor, carga transportada, estado mecánico y posible tanqueo no registrado.'
+                 :'Un consumo menor también se revisa: viajes o km sin registrar, tanqueo parcial o mal digitado, odómetro incorrecto o manejo muy eficiente que convendría replicar.';
+    out.push({n,key,t,fac,rec,mas,p,dev:b.dev,peer})});
+  const ord={crit:0,warn:1};return out.sort((a,b)=>ord[a.n]-ord[b.n]||Math.abs(b.dev)-Math.abs(a.dev));
+}
+function resumenRutas(per){
+  const G={};
+  per.filter(p=>p.rutaUnica&&p.nViajes>0&&p.gal>0).forEach(p=>{
+    const gr=(p.ralentiH!=null&&p.veh.ralenti!=null)?p.ralentiH*p.veh.ralenti:0,g=G[p.rutaUnica]=G[p.rutaUnica]||{nombre:p.rutaNombre,v:[],pl:new Set()};
+    g.v.push((p.gal-gr)/p.nViajes);g.pl.add(p.placa)});
+  return Object.values(G).filter(g=>g.v.length>=2).sort((a,b)=>a.nombre<b.nombre?-1:1);
+}
+function renderAlertasRuta(per){
+  const A=alertasRuta(per),R=resumenRutas(per),el=$('#alertas-ruta');if(!el)return;
+  el.innerHTML=A.length?A.map(x=>`<div class="alerta" data-k="${esc(x.key)}">${chip(x.n,x.n==='crit'?'CRÍTICO':'REVISAR')}<div><b>${x.mas?'Consumió MÁS de lo esperado':'Consumió MENOS de lo esperado'}</b> · ${esc(x.t)}<div class="small muted" style="margin-top:4px"><b>Factores del período:</b> ${x.fac.map(esc).join(' · ')}</div><div class="small muted"><b>Qué revisar:</b> ${esc(x.rec)}</div></div></div>`).join(''):'<p class="muted">Sin alertas: el consumo de los períodos está dentro de lo esperado para sus rutas (incluido el ralentí).</p>';
+  el.querySelectorAll('.alerta').forEach(d=>d.onclick=()=>{selKey=d.dataset.k;renderResumen();$('#detalle').scrollIntoView({behavior:'smooth'})});
+  const rt=$('#tbl-rutas-cons');
+  rt.innerHTML=R.length?'<tr><th>Ruta</th><th class="n">Períodos de ruta única</th><th>Vehículos</th><th class="n">Gal/viaje mediana</th><th class="n">Mínimo</th><th class="n">Máximo</th><th class="n">Variación máx./mín.</th></tr>'+R.map(g=>`<tr><td><b>${esc(g.nombre)}</b></td><td class="n">${g.v.length}</td><td>${[...g.pl].map(esc).join(', ')}</td><td class="n">${fmt(median(g.v),1)}</td><td class="n">${fmt(Math.min(...g.v),1)}</td><td class="n">${fmt(Math.max(...g.v),1)}</td><td class="n">${fmt((Math.max(...g.v)/Math.min(...g.v)-1)*100,0)} %</td></tr>`).join(''):'<tr><td class="muted">Se necesitan al menos 2 períodos que hayan hecho una sola ruta para comparar el consumo entre rutas.</td></tr>';
+}
 function alertas(per,modo){
   const L=[],tc=S.config.tolConsumo,tr=S.config.tolRepeticion;
   per.forEach(p=>{
@@ -815,6 +883,7 @@ function alertas(per,modo){
     if(p.rep&&p.rep.alerta)L.push({n:Math.abs(p.rep.pct)>tr*2?'crit':'warn',key,t:ref+' · '+repTexto(p)});
     if(p.devHist!=null&&p.devHist>tr)L.push({n:'warn',key,t:ref+' · Galones por km de ruta '+fmt(p.devHist,1)+' % por encima de la mediana histórica del vehículo.'});
   });
+  alertasRuta(per).forEach(x=>L.push({n:x.n,key:x.key,t:x.t+' Factores: '+x.fac.join('; ')+'.'}));
   const ord={err:0,crit:1,warn:2};
   return L.sort((a,b)=>ord[a.n]-ord[b.n]);
 }
@@ -866,11 +935,12 @@ function renderResumen(){
   const per=todosPeriodos().sort((a,b)=>dtT(b.B)-dtT(a.B));
   const t=$('#tbl-periodos');
   $('#vacio-periodos').textContent=per.length?'':'Aún no hay períodos. Registre al menos dos tanqueos full del mismo vehículo.';
-  t.innerHTML=per.length?`<tr><th>Vehículo</th><th>Período</th><th class="n">Km odómetro</th><th class="n">Km Satrack</th><th class="n">Dif. %</th><th class="n">Viajes</th><th class="n">Combustible</th><th class="n">Dif. galones vs estándar</th><th>Estado</th><th>Rutas repetidas</th><th>Calidad del dato</th></tr>`+
+  t.innerHTML=per.length?`<tr><th>Vehículo</th><th>Período</th><th class="n">Km odómetro</th><th class="n">Km Satrack</th><th class="n">Dif. %</th><th class="n">Viajes</th><th class="n">Combustible</th><th class="n">Dif. galones vs estándar</th><th class="n">Ralentí (h)</th><th class="n">Gal. en ralentí</th><th class="n">Gal. esperados totales<div class="small muted">rodando + ralentí</div></th><th class="n">Dif. consumo total<div class="small muted">real − esperado</div></th><th>Estado</th><th>Rutas repetidas</th><th>Calidad del dato</th></tr>`+
     per.map(p=>{const k=p.placa+'|'+p.B.id;
       const rep=p.rep?(p.rep.alerta?chip(Math.abs(p.rep.pct)>S.config.tolRepeticion*2?'crit':'warn',(p.rep.dif>0?'+':'−')+fmt(Math.abs(p.rep.pct),0)+' % galones'):chip('ok','Similar')):'<span class="muted">—</span>';
-      return `<tr class="click ${k===selKey?'sel':''}" data-k="${esc(k)}"><td><b>${esc(p.placa)}</b></td><td>${fd(p.A.fecha)} – ${fd(p.B.fecha)}</td><td class="n">${fmt(p.kmOdo)}</td><td class="n">${fmt(p.kmSat)}</td><td class="n">${p.difPct==null?'—':fmt(p.difPct,1)+' %'}</td><td class="n">${p.nViajes}</td><td class="n">${money(p.costo)}</td><td class="n">${(()=>{const k=kmBase(p,S.config.baseKm);if(!k)return '—';const e=k*p.veh.std;return sgal(p.gal-e)+' <span class="muted small">('+sg((p.gal-e)/e*100)+')</span>'})()}</td><td>${chip(p.estado.n,p.estado.t)}</td><td>${rep}</td><td>${chip(p.calidad.n,p.calidad.t)}</td></tr>`}).join(''):'';
+      return `<tr class="click ${k===selKey?'sel':''}" data-k="${esc(k)}"><td><b>${esc(p.placa)}</b></td><td>${fd(p.A.fecha)} – ${fd(p.B.fecha)}</td><td class="n">${fmt(p.kmOdo)}</td><td class="n">${fmt(p.kmSat)}</td><td class="n">${p.difPct==null?'—':fmt(p.difPct,1)+' %'}</td><td class="n">${p.nViajes}</td><td class="n">${money(p.costo)}</td><td class="n">${(()=>{const k=kmBase(p,S.config.baseKm);if(!k)return '—';const e=k*p.veh.std;return sgal(p.gal-e)+' <span class="muted small">('+sg((p.gal-e)/e*100)+')</span>'})()}</td>${(()=>{const c=consTotal(p,S.config.baseKm);return `<td class="n">${p.ralentiH==null?'—':fmt(p.ralentiH,1)+' h'}</td><td class="n">${c&&c.gr!=null?fmt(c.gr,1)+' gal':'—'}</td><td class="n">${c?fmt(c.tot,1)+' gal<div class="small muted">'+fmt(c.rod,1)+' + '+(c.gr!=null?fmt(c.gr,1):'0 (sin ralentí)')+'</div>':'—'}</td><td class="n">${c?(c.pct==null?sgal(c.dif):chip(nivKm(c.pct,S.config.tolConsumo),sgal(c.dif)+' ('+sg(c.pct)+')')):'—'}</td>`})()}<td>${chip(p.estado.n,p.estado.t)}</td><td>${rep}</td><td>${chip(p.calidad.n,p.calidad.t)}</td></tr>`}).join(''):'';
   t.querySelectorAll('tr.click').forEach(tr=>tr.onclick=()=>{selKey=tr.dataset.k;renderResumen();$('#detalle').scrollIntoView({behavior:'smooth'})});
+  renderAlertasRuta(per);
   const p=per.find(x=>x.placa+'|'+x.B.id===selKey)||per[0];
   if(p&&!per.find(x=>x.placa+'|'+x.B.id===selKey))selKey=p.placa+'|'+p.B.id;
   $('#detalle').innerHTML=p?detalleHTML(p):'';
@@ -966,7 +1036,7 @@ function detalleHTML(p){
     </table></div>
     <p class="muted small">Esperado = km × estándar${p.ralPosible?' (+ horas de ralentí × '+fmt(v.ralenti,2)+' gal/h en el escenario D)':''}; en el escenario C se usa el galonaje aproximado de las rutas por vehículo. ${p.ralentiH==null?'Escenario D no disponible: falta registrar horas de ralentí. ':''}${(p.ralentiH!=null&&v.ralenti==null)?'Escenario D no disponible: falta el consumo de ralentí (gal/h) del vehículo. ':''}Modo de fuente: ${esc({comparativo:'comparativo',odometro:'odómetro',satrack:'Satrack',automatico:'automático'}[cfg.fuente])}.</p>
 
-    ${p.viajes.length?`<h3>Viajes y remisiones del período</h3>${tablaViajes(p.viajes)}`:''}
+    ${p.viajes.length||p.ralentiH!=null?`<h3>Viajes y remisiones del período</h3>${p.viajes.length?tablaViajes(p.viajes):''}${bloqueRalenti(p)}`:''}
 
     <h3>Calidad del dato</h3>
     <div class="row">${p.fuentes.map(f=>`<span class="chip ${f[1]?'ok':'na'}">${f[1]?'✔':'✖'} ${f[0]}</span>`).join('')}</div>
@@ -977,6 +1047,13 @@ function detalleHTML(p){
   </div>`;
 }
 
+function bloqueRalenti(p){
+  if(p.ralentiH==null)return '<p class="muted small">No hay horas de ralentí registradas en este período.</p>';
+  const cr=p.veh.ralenti,gal=cr!=null?p.ralentiH*cr:null;
+  return `<div class="wrap" style="margin-top:10px"><table class="tbl"><tr><th>Ralentí del período</th><th class="n">Horas de ralentí</th><th class="n">Consumo en ralentí (gal/h)</th><th class="n">Galones consumidos en ralentí</th><th class="n">% del combustible tanqueado</th></tr>
+    <tr class="tot"><td><b>${esc(p.placa)}</b></td><td class="n">${fmt(p.ralentiH,1)} h</td><td class="n">${cr==null?'—':fmt(cr,2)}</td><td class="n">${gal==null?'—':fmt(gal,1)+' gal'}</td><td class="n">${gal!=null&&p.gal>0?fmt(gal/p.gal*100,1)+' %':'—'}</td></tr></table></div>
+    ${cr==null?'<p class="muted small">Falta el consumo de ralentí (gal/h) del vehículo en Configuración para calcular los galones.</p>':'<p class="muted small">Galones en ralentí = horas de ralentí del período × consumo de ralentí (gal/h) del vehículo en Configuración.</p>'}`;
+}
 function tablaViajes(vs,acciones){
   /* Conciliación (sin acciones): una fila por día y vehículo. Los km de Satrack y de odómetro NO se toman del registro del viaje sino de la
      sección Viajes → «Rutas realizadas por día y vehículo»: «Km Satrack (informe diario)» y «Km preop. (posterior − inicial)».
@@ -985,11 +1062,14 @@ function tablaViajes(vs,acciones){
     const C=new Map(crucePorDia().map(r=>[r.fecha+'|'+r.placa,r])),g={};
     vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;(g[k]=g[k]||[]).push(v)});
     return `<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th>Rutas y remisiones</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Km Satrack<div class="small muted">informe diario</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km)</div></th><th class="n">Km preop.<div class="small muted">posterior − inicial</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km preop. × estándar (gal/km)</div></th></tr>`+
-    Object.keys(g).sort().map(k=>{const a=g[k],[f,pl]=k.split('|'),r=C.get(k)||{},std=vehiculo(pl).std,gv=a.reduce((x,v)=>x+galViaje(v),0),
+    (()=>{const T={n:0,km:0,gv:0,kS:0,gS:0,kP:0,gO:0,hS:false,hP:false,parc:false};T.rows=Object.keys(g).sort().map(k=>{const a=g[k],[f,pl]=k.split('|'),r=C.get(k)||{},std=vehiculo(pl).std,gv=a.reduce((x,v)=>x+galViaje(v),0),
       kmS=r.kmSat==null?null:r.kmSat,kmP=r.kmPre==null?null:r.kmPre,gS=kmS!=null?kmS*std:null,gO=kmP!=null&&kmP>=0?kmP*std:null,
-      parcial=r.vs&&a.length<r.vs.length,
-      cel=(g2,cmp)=>g2==null?'—':`<b>${fmt(g2,1)} gal</b>${cmp&&gv>0?'<div class="small muted">'+sgal(g2-gv)+' vs ruta</div>':''}`;
-      return `<tr><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}${parcial?'<div class="small muted">Los km diarios son del día completo (hay viajes del día en otro período)</div>':''}</td><td class="n">${a.reduce((x,v)=>x+nV(v),0)}</td><td class="n">${fmt(a.reduce((x,v)=>x+kmViaje(v),0),1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${kmS==null?'—':fmt(kmS,1)}</td><td class="n">${cel(gS,!parcial)}</td><td class="n">${kmP==null?'—':fmt(kmP)}${kmP!=null&&kmP<0?' <span class="bad">⚠</span>':''}${r.gap>1?'<div class="small muted">'+r.gap+' días hasta la siguiente medición</div>':''}</td><td class="n">${cel(gO,!parcial&&!(r.gap>1))}</td></tr>`}).join('')+`</table></div>`;
+      parcial=r.vs&&a.length<r.vs.length;
+      T.n+=a.reduce((x,v)=>x+nV(v),0);T.km+=a.reduce((x,v)=>x+kmViaje(v),0);T.gv+=gv;if(kmS!=null){T.kS+=kmS;T.gS+=gS;T.hS=true}if(kmP!=null&&kmP>=0){T.kP+=kmP;T.gO+=gO;T.hP=true}if(parcial)T.parc=true;
+      const 
+cel=(g2,cmp)=>g2==null?'—':`<b>${fmt(g2,1)} gal</b>${cmp&&gv>0?'<div class="small muted">'+sgal(g2-gv)+' vs ruta</div>':''}`;
+      return `<tr><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}${parcial?'<div class="small muted">Los km diarios son del día completo (hay viajes del día en otro período)</div>':''}</td><td class="n">${a.reduce((x,v)=>x+nV(v),0)}</td><td class="n">${fmt(a.reduce((x,v)=>x+kmViaje(v),0),1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${kmS==null?'—':fmt(kmS,1)}</td><td class="n">${cel(gS,!parcial)}</td><td class="n">${kmP==null?'—':fmt(kmP)}${kmP!=null&&kmP<0?' <span class="bad">⚠</span>':''}${r.gap>1?'<div class="small muted">'+r.gap+' días hasta la siguiente medición</div>':''}</td><td class="n">${cel(gO,!parcial&&!(r.gap>1))}</td></tr>`});
+      return T.rows.join('')+`<tr class="tot"><td colspan="3"><b>TOTAL DEL PERÍODO</b></td><td class="n">${T.n}</td><td class="n">${fmt(T.km,1)}</td><td class="n">${fmt(T.gv,1)}</td><td class="n">${T.hS?fmt(T.kS,1):'—'}</td><td class="n">${T.hS?fmt(T.gS,1)+' gal':'—'}</td><td class="n">${T.hP?fmt(T.kP):'—'}</td><td class="n">${T.hP?fmt(T.gO,1)+' gal':'—'}</td></tr></table></div>`+(T.parc?'<p class="muted small">El total incluye los km diarios de días completos que se reparten entre dos períodos.</p>':'');})();
   }
   return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th><th></th></tr>`+
   vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),std=kmViaje(v);
@@ -2040,7 +2120,7 @@ async function exportPDF(sec){
 function libro(sec){
  const modo=S.config.baseKm,per=todosPeriodos().sort((a,b)=>dtT(a.B)-dtT(b.B)),W={},bn=BASES[modo],A=analisisTodo();
  if(sec==='resumen'){
-  W['Períodos']=TT(['Placa','Inicio','Fin','Km odómetro','Km Satrack','Fuente Satrack','Dif. km','Dif. %','Km viajes','N.º viajes','Galones','Precio prom. galón','Total combustible','Gal. aprox. rutas','Ralentí h','Gal/km odómetro','Gal/km Satrack','Estándar gal/km','Dif. gal vs estándar (odómetro)','Dif. % vs estándar (odómetro)','Estado','Calidad del dato','Rutas repetidas (var. gal %)'],per.map(p=>{const e=p.kmOdo>0?p.kmOdo*p.veh.std:null;return[p.placa,p.A.fecha+' '+(p.A.hora||''),p.B.fecha+' '+(p.B.hora||''),p.kmOdo,p.kmSat,p.fuenteSat||'',p.difAbs,p.difPct,p.kmViajes,p.nViajes,p.gal,p.precioProm,p.costo,p.galAprox,p.ralentiH,p.consOdo,p.consSat,p.veh.std,e==null?null:p.gal-e,e?(p.gal-e)/e*100:null,p.estado.t,p.calidad.t,p.rep&&p.rep.pct!=null?p.rep.pct:null]}));
+  W['Períodos']=TT(['Placa','Inicio','Fin','Km odómetro','Km Satrack','Fuente Satrack','Dif. km','Dif. %','Km viajes','N.º viajes','Galones','Precio prom. galón','Total combustible','Gal. aprox. rutas','Ralentí h','Gal/km odómetro','Gal/km Satrack','Estándar gal/km','Dif. gal vs estándar (odómetro)','Dif. % vs estándar (odómetro)','Estado','Calidad del dato','Rutas repetidas (var. gal %)','Gal. en ralentí','Gal. esperados totales (rodando + ralentí)','Dif. gal consumo total','Dif. % consumo total'],per.map(p=>{const e=p.kmOdo>0?p.kmOdo*p.veh.std:null,ct=consTotal(p,S.config.baseKm);return[p.placa,p.A.fecha+' '+(p.A.hora||''),p.B.fecha+' '+(p.B.hora||''),p.kmOdo,p.kmSat,p.fuenteSat||'',p.difAbs,p.difPct,p.kmViajes,p.nViajes,p.gal,p.precioProm,p.costo,p.galAprox,p.ralentiH,p.consOdo,p.consSat,p.veh.std,e==null?null:p.gal-e,e?(p.gal-e)/e*100:null,p.estado.t,p.calidad.t,p.rep&&p.rep.pct!=null?p.rep.pct:null,ct&&ct.gr!=null?ct.gr:null,ct?ct.tot:null,ct?ct.dif:null,ct&&ct.pct!=null?ct.pct:null]}));
   W['Escenarios']=TT(['Placa','Período','Escenario','Km base','Gal. esperados','Gal. reales','Dif. gal','Dif. %'],per.flatMap(p=>p.escenarios.map(s=>[p.placa,p.A.fecha+' → '+p.B.fecha,s.nombre,s.km,s.esp,s.real,s.real-s.esp,s.dev])));
   const pls=[...new Set(per.map(p=>p.placa))].sort();
   W['Por vehículo']=TT(['Vehículo','Períodos','Km base ('+bn+')','Gal. consumidos','Gal/km','Estándar','Desviación %','Sobreconsumo gal','Sobreconsumo $','Viajes','Gal/viaje','Costo/km'],pls.map(pl=>{const a=agg(per.filter(p=>p.placa===pl),modo);return[pl,a.n,a.km,a.gal,a.galkm,vehiculo(pl).std,a.desv,a.sobreGal,a.sobreCosto,a.nViajes,a.galViaje,a.costoKm]}));
