@@ -978,14 +978,18 @@ function detalleHTML(p){
 }
 
 function tablaViajes(vs,acciones){
-  /* Conciliación (sin acciones): sin columnas de km medidos; se muestra el consumo estimado de galones con km Satrack y con km de odómetro,
-     usando el consumo estándar (gal/km) del vehículo definido en Configuración. Pestaña Viajes (con acciones): tabla completa de siempre. */
+  /* Conciliación (sin acciones): una fila por día y vehículo. Los km de Satrack y de odómetro NO se toman del registro del viaje sino de la
+     sección Viajes → «Rutas realizadas por día y vehículo»: «Km Satrack (informe diario)» y «Km preop. (posterior − inicial)».
+     Galones estimados = esos km × estándar (gal/km) del vehículo en Configuración. */
   if(!acciones){
-    return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km) del vehículo</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km odómetro × estándar (gal/km) del vehículo</div></th></tr>`+
-    vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,sk=num(v.satKm),std=kmViaje(v),gv=galViaje(v),
-      tasa=vehiculo(v.placa).std,gS=sk!=null&&tasa>0?sk*tasa:null,gO=o!=null&&o>=0&&tasa>0?o*tasa:null,
-      cel=(g,km)=>g==null?'—':`${fmt(g,1)} gal<div class="small muted">${fmt(km,1)} km${gv>0?' · '+sgal(g-gv):''}</div>`;
-      return `<tr><td>${fdt(v.salida)}</td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${fmt(std,1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${cel(gS,sk)}</td><td class="n">${cel(gO,o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td></tr>`}).join('')+`</table></div>`;
+    const C=new Map(crucePorDia().map(r=>[r.fecha+'|'+r.placa,r])),g={};
+    vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;(g[k]=g[k]||[]).push(v)});
+    return `<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th>Rutas y remisiones</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Km Satrack<div class="small muted">informe diario</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km)</div></th><th class="n">Km preop.<div class="small muted">posterior − inicial</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km preop. × estándar (gal/km)</div></th></tr>`+
+    Object.keys(g).sort().map(k=>{const a=g[k],[f,pl]=k.split('|'),r=C.get(k)||{},std=vehiculo(pl).std,gv=a.reduce((x,v)=>x+galViaje(v),0),
+      kmS=r.kmSat==null?null:r.kmSat,kmP=r.kmPre==null?null:r.kmPre,gS=kmS!=null?kmS*std:null,gO=kmP!=null&&kmP>=0?kmP*std:null,
+      parcial=r.vs&&a.length<r.vs.length,
+      cel=(g2,cmp)=>g2==null?'—':`<b>${fmt(g2,1)} gal</b>${cmp&&gv>0?'<div class="small muted">'+sgal(g2-gv)+' vs ruta</div>':''}`;
+      return `<tr><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}${parcial?'<div class="small muted">Los km diarios son del día completo (hay viajes del día en otro período)</div>':''}</td><td class="n">${a.reduce((x,v)=>x+nV(v),0)}</td><td class="n">${fmt(a.reduce((x,v)=>x+kmViaje(v),0),1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${kmS==null?'—':fmt(kmS,1)}</td><td class="n">${cel(gS,!parcial)}</td><td class="n">${kmP==null?'—':fmt(kmP)}${kmP!=null&&kmP<0?' <span class="bad">⚠</span>':''}${r.gap>1?'<div class="small muted">'+r.gap+' días hasta la siguiente medición</div>':''}</td><td class="n">${cel(gO,!parcial&&!(r.gap>1))}</td></tr>`}).join('')+`</table></div>`;
   }
   return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th><th></th></tr>`+
   vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),std=kmViaje(v);
