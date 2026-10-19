@@ -157,7 +157,8 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     <h2>Nivel estimado de combustible en el tanque</h2>
     <p class="muted small" style="margin-top:0">Se parte de la referencia más reciente (último tanqueo full = tanque lleno, o la última medición con regla del preoperacional), se suman los galones tanqueados después y se restan los galones estimados: km (odómetro y, después de la última lectura, Satrack diario) × estándar (gal/km) + ralentí × consumo de ralentí (gal/h). Si el nivel baja del mínimo configurado, se avisa para que el conductor tanquee ese día. Es una estimación: confírmela con la regla del tanque.</p>
     <div class="wrap"><table class="tbl" id="tbl-nivel"></table></div>
-    <div class="row" style="margin-top:8px"><button class="btn sec sm" type="button" id="nv-notif">Activar avisos del navegador</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn sec sm" type="button" id="nv-notif">Activar avisos del navegador</button><button class="btn sec sm" type="button" id="nv-test">Enviar correo de prueba</button><button class="btn sec sm" type="button" id="nv-gs">Descargar Correo.gs (instalación)</button></div>
+    <details class="man" style="margin-top:8px"><summary>Cómo activar el correo automático</summary><div class="small" style="margin-top:6px">El correo sale desde su Apps Script (el mismo de Google Sheets). Cuando un vehículo queda con el mínimo configurado o menos, el aplicativo envía <b>un correo por vehículo y por día</b> a la dirección de Configuración (por defecto igcfuel@gmail.com). Para activarlo:<ol><li>En su proyecto de Apps Script cree el archivo <b>Correo.gs</b> con el botón «Descargar Correo.gs».</li><li>En <b>doPost(e)</b>, como primeras líneas: <code>var mail = correoDoPost_(e); if (mail) return mail;</code></li><li>Ejecute una vez la función <b>autorizarCorreo_</b> y acepte los permisos.</li><li><b>Implementar → Administrar implementaciones → ✏ → Nueva versión → Implementar</b>.</li><li>Pulse «Enviar correo de prueba».</li></ol>Solo se envía a las direcciones de la propiedad de script <b>MAIL_TO</b> (por defecto igcfuel@gmail.com). El aviso se genera cuando el aplicativo está abierto y se registran datos (tanqueos, mediciones preoperacionales, informes Satrack).</div></details>
   </div>
   <div class="card">
     <h2 id="t-titulo">Registrar tanqueo</h2>
@@ -446,7 +447,9 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <div><label>Tolerancia de consumo vs estándar (%)</label><input type="number" id="c-tolcons" min="0" step="0.5"></div>
       <div><label>Preoperacional vs viajes: margen de error (%)</label><input type="number" id="c-tpre" min="0" step="0.5"></div>
       <div><label>Alerta por rutas repetidas: variación de galones (%)</label><input type="number" id="c-tolrep" min="0" step="0.5"></div>
-      <div><label>Aviso de combustible bajo: galones mínimos en el tanque</label><input type="number" id="c-nivmin" min="0" step="1"></div>
+      <div><label>Aviso de combustible bajo: galones mínimos en el tanque (avisa con ese valor o menos)</label><input type="number" id="c-nivmin" min="0" step="1"></div>
+      <div><label>Correo para los avisos de combustible bajo</label><input type="email" id="c-nivmail" placeholder="igcfuel@gmail.com"></div>
+      <div><label>Envío automático de correo</label><select id="c-nivmailon"><option value="1">Activado</option><option value="0">Desactivado</option></select></div>
       <div><label>Salto anormal: veces la mediana histórica</label><input type="number" id="c-saltof" min="1.5" step="0.5"></div>
       <div><label>Salto anormal: mínimo de intervalos previos</label><input type="number" id="c-saltom" min="1" step="1"></div>
     </div>
@@ -1473,18 +1476,41 @@ function nivelComb(pl){
   const kmTot=kmOdo+kmSat,cons=kmTot*std+ralG,nivel=Math.max(0,Math.min(cap>0?+cap:Infinity,a.nivel+added-cons));
   const hasta=Math.max(Lr.t,...sat.map(x=>x.t0)),min=nivMin();
   const cands=[...S.preop.filter(r=>r.placa===pl&&r.conductor).map(r=>({t:dtP(r),c:r.conductor})),...S.viajes.filter(v=>v.placa===pl&&v.conductor).map(v=>({t:dtV(v),c:v.conductor})),...tqs.filter(t=>t.conductor).map(t=>({t:dtT(t),c:t.conductor}))].sort((x,y)=>x.t-y.t);
-  return{placa:pl,nivel,min,bajo:nivel<min,crit:nivel<min/2,ref:a.txt,kmTot,kmOdo,kmSat,ralH,ralG,added,cons,hasta,edad:Math.round((diaIni(Date.now())-diaIni(hasta))/DIA),cond:cands.length?cands[cands.length-1].c:'',aut:nivel>0&&std>0?nivel/std:0,cap};
+  return{placa:pl,nivel,min,bajo:nivel<=min,crit:nivel<=min/2,ref:a.txt,kmTot,kmOdo,kmSat,ralH,ralG,added,cons,hasta,edad:Math.round((diaIni(Date.now())-diaIni(hasta))/DIA),cond:cands.length?cands[cands.length-1].c:'',aut:nivel>0&&std>0?nivel/std:0,cap};
 }
 const nivelesComb=()=>[...new Set(S.vehiculos.map(v=>v.placa).concat(S.tanqueos.map(t=>t.placa)))].sort().map(nivelComb).filter(Boolean);
-const msgNivel=n=>'Aviso de combustible: '+(n.cond?n.cond+', ':'')+'el vehículo '+n.placa+' tiene aproximadamente '+fmt(n.nivel,0)+' galones en el tanque (menos de '+fmt(n.min,0)+'). Debe tanquear hoy.';
+const msgNivel=n=>'Aviso de combustible: '+(n.cond?n.cond+', ':'')+'el vehículo '+n.placa+' tiene aproximadamente '+fmt(n.nivel,0)+' galones en el tanque (mínimo configurado: '+fmt(n.min,0)+'). Debe tanquear hoy.';
+const mailTo=()=>S.config.emailAvisos||'igcfuel@gmail.com';
+function correoNivel(n,prueba){
+  const L=[msgNivel(n),'','Vehículo: '+n.placa,'Conductor: '+(n.cond||'—'),'Nivel estimado: '+fmt(n.nivel,0)+' gal'+(n.cap>0?' de '+fmt(n.cap,0):''),'Mínimo configurado: '+fmt(n.min,0)+' gal','Autonomía aproximada: '+fmt(n.aut,0)+' km','Referencia: '+n.ref,'Km desde la referencia: '+fmt(n.kmTot,0)+' (odómetro '+fmt(n.kmOdo,0)+' + Satrack '+fmt(n.kmSat,0)+')','Ralentí desde la referencia: '+fmt(n.ralH,1)+' h','Tanqueado después de la referencia: '+fmt(n.added,1)+' gal','Datos hasta: '+fd(dIso(n.hasta)),'','Estimación de IGC FUEL CONTROL: confírmela con la regla del tanque.'];
+  return{to:mailTo(),subject:(prueba?'[PRUEBA] ':'')+'⛽ Combustible bajo · '+n.placa+' · ~'+fmt(n.nivel,0)+' gal (mínimo '+fmt(n.min,0)+')',body:(prueba?'ESTE ES UN CORREO DE PRUEBA.\n\n':'')+L.join('\n'),html:'<div style="font-family:Arial,sans-serif;font-size:14px">'+(prueba?'<b>ESTE ES UN CORREO DE PRUEBA.</b><br><br>':'')+L.map(l=>l?'<div>'+esc(l)+'</div>':'<br>').join('')+'</div>'};
+}
+const errCorreo=e=>/no soportada|unsupported|not supported/i.test(e.message||'')?'El Apps Script aún no tiene Correo.gs (descárguelo, instálelo y publique una nueva versión)':(e.message||String(e));
+function chequearCorreoNivel(N){
+  const hoy=dIso(Date.now()),cfg=S.config;cfg.avisoCorreo=cfg.avisoCorreo||{};window._nvTry=window._nvTry||{};window._nvErr=window._nvErr||{};
+  N.forEach(n=>{
+    if(!n.bajo){if(cfg.avisoCorreo[n.placa]){delete cfg.avisoCorreo[n.placa];save()}delete window._nvErr[n.placa];return}
+    if(!(window._nvToast=window._nvToast||{})[n.placa]){window._nvToast[n.placa]=1;toast('⛽ Combustible bajo en '+n.placa+': ~'+fmt(n.nivel,0)+' gal. Debe tanquear hoy.')}
+    if(cfg.emailAuto===false||cfg.avisoCorreo[n.placa]===hoy||!CL.url||!pulled)return;
+    if(Date.now()-(window._nvTry[n.placa]||0)<600000)return;window._nvTry[n.placa]=Date.now();
+    const m=correoNivel(n);
+    cloud('sendEmail',m).then(()=>{cfg.avisoCorreo[n.placa]=hoy;delete window._nvErr[n.placa];save();toast('📧 Correo enviado a '+m.to+' (combustible bajo en '+n.placa+')');renderNivelComb()})
+      .catch(e=>{window._nvErr[n.placa]=errCorreo(e);toast('No se pudo enviar el correo: '+window._nvErr[n.placa]);renderNivelComb()});
+  });
+}
+const estadoCorreo=n=>{const c=S.config,hoy=dIso(Date.now());if(c.emailAuto===false)return'Correo automático desactivado';if(c.avisoCorreo&&c.avisoCorreo[n.placa]===hoy)return'📧 Correo enviado hoy a '+mailTo();if(!CL.url)return'Sin Apps Script configurado: no se envió correo automático';if((window._nvErr||{})[n.placa])return'⚠ No se pudo enviar el correo: '+window._nvErr[n.placa];return'📧 Enviando correo a '+mailTo()+'…'};
 function renderNivelComb(){
-  const N=nivelesComb(),bajos=N.filter(n=>n.bajo),av=$('#aviso-comb'),t=$('#tbl-nivel');
-  if(av)av.innerHTML=bajos.map(n=>`<div class="banner ${n.crit?'crit':'warn'}" style="margin:8px 0"><b>⛽ Combustible bajo · ${esc(n.placa)}</b>: ~${fmt(n.nivel,0)} gal en el tanque (mínimo ${fmt(n.min,0)})${n.cond?' · conductor <b>'+esc(n.cond)+'</b>':''} → <b>debe tanquear hoy</b>. <span class="small">Estimado con datos hasta ${fd(dIso(n.hasta))}${n.edad>1?' (hace '+n.edad+' días)':''}.</span> <button class="btn sec sm" type="button" data-nv="copy" data-p="${esc(n.placa)}">Copiar mensaje</button> <button class="btn sec sm" type="button" data-nv="wa" data-p="${esc(n.placa)}">WhatsApp</button></div>`).join('');
+  const N=nivelesComb(),bajos=N.filter(n=>n.bajo),av=$('#aviso-comb'),t=$('#tbl-nivel');chequearCorreoNivel(N);
+  if(av)av.innerHTML=bajos.map(n=>`<div class="banner ${n.crit?'crit':'warn'}" style="margin:8px 0"><b>⛽ Combustible bajo · ${esc(n.placa)}</b>: ~${fmt(n.nivel,0)} gal en el tanque (mínimo ${fmt(n.min,0)})${n.cond?' · conductor <b>'+esc(n.cond)+'</b>':''} → <b>debe tanquear hoy</b>. <span class="small">Estimado con datos hasta ${fd(dIso(n.hasta))}${n.edad>1?' (hace '+n.edad+' días)':''}. ${esc(estadoCorreo(n))}</span> <a class="btn sec sm" href="mailto:${esc(mailTo())}?subject=${encodeURIComponent(correoNivel(n).subject)}&body=${encodeURIComponent(correoNivel(n).body)}">Enviar con mi correo</a> <button class="btn sec sm" type="button" data-nv="copy" data-p="${esc(n.placa)}">Copiar mensaje</button> <button class="btn sec sm" type="button" data-nv="wa" data-p="${esc(n.placa)}">WhatsApp</button></div>`).join('');
   if(t)t.innerHTML=N.length?'<tr><th>Vehículo</th><th>Conductor</th><th>Referencia</th><th class="n">Km desde la referencia</th><th class="n">Ralentí (h)</th><th class="n">Tanqueado después (gal)</th><th class="n">Consumo estimado (gal)</th><th class="n">Nivel estimado (gal)</th><th class="n">Autonomía aprox. (km)</th><th>Estado</th><th></th></tr>'+
     N.map(n=>`<tr><td><b>${esc(n.placa)}</b></td><td>${esc(n.cond)||'<span class="muted">—</span>'}</td><td>${esc(n.ref)}<div class="small muted">datos hasta ${fd(dIso(n.hasta))}${n.edad>1?' · hace '+n.edad+' días':''}</div></td><td class="n">${fmt(n.kmTot,0)}<div class="small muted">odómetro ${fmt(n.kmOdo,0)} + Satrack ${fmt(n.kmSat,0)}</div></td><td class="n">${fmt(n.ralH,1)} h</td><td class="n">${fmt(n.added,1)}</td><td class="n">${fmt(n.cons,1)}</td><td class="n"><b>${fmt(Math.max(0,n.nivel),0)}</b>${n.cap>0?'<div class="small muted">de '+fmt(n.cap,0)+'</div>':''}</td><td class="n">${fmt(n.aut,0)}</td><td>${n.bajo?chip(n.crit?'crit':'warn','Debe tanquear hoy'):chip('ok','Nivel suficiente')}</td><td>${n.bajo?`<button class="btn sec sm" type="button" data-nv="copy" data-p="${esc(n.placa)}">Copiar aviso</button> <button class="btn sec sm" type="button" data-nv="wa" data-p="${esc(n.placa)}">WhatsApp</button>`:''}</td></tr>`).join('')
     :'<tr><td class="muted">Para estimar el nivel se necesita un tanqueo full con odómetro (y la capacidad del tanque en Configuración) o una medición con regla en el preoperacional.</td></tr>';
   if(!window._nvWired){window._nvWired=true;document.addEventListener('click',e=>{const b=e.target.closest('[data-nv]');if(!b)return;const n=nivelesComb().find(x=>x.placa===b.dataset.p);if(!n)return;const m=msgNivel(n);
     if(b.dataset.nv==='wa')window.open('https://wa.me/?text='+encodeURIComponent(m),'_blank');else if(navigator.clipboard)navigator.clipboard.writeText(m).then(()=>toast('Aviso copiado'))})}
+  const tb=$('#nv-test');if(tb)tb.onclick=async()=>{if(!CL.url)return toast('Primero configure la URL del Apps Script (pestaña Configuración)');
+    const n=N[0]||{placa:'PRUEBA',nivel:75,min:nivMin(),cap:160,aut:375,ref:'ejemplo',kmTot:0,kmOdo:0,kmSat:0,ralH:0,added:0,hasta:Date.now(),cond:''};
+    try{tb.disabled=true;const m=correoNivel(n,true);await cloud('sendEmail',m);toast('📧 Correo de prueba enviado a '+m.to)}catch(e){toast('No se pudo enviar: '+errCorreo(e))}finally{tb.disabled=false}};
+  const gb=$('#nv-gs');if(gb)gb.onclick=()=>{const u=URL.createObjectURL(new Blob([$('#gs-correo').textContent],{type:'text/plain'})),a=document.createElement('a');a.href=u;a.download='Correo.gs';a.click();setTimeout(()=>URL.revokeObjectURL(u),5000)};
   const nb=$('#nv-notif');if(nb){nb.style.display=('Notification' in window&&Notification.permission==='default')?'':'none';nb.onclick=()=>{try{Notification.requestPermission().then(()=>renderNivelComb())}catch(e){}}}
   try{if('Notification' in window&&Notification.permission==='granted')bajos.forEach(n=>{const k='igc_nv_'+dIso(Date.now())+'_'+n.placa;if(!localStorage.getItem(k)){new Notification('Combustible bajo · '+n.placa,{body:msgNivel(n)});localStorage.setItem(k,'1')}})}catch(e){}
 }
@@ -1605,7 +1631,7 @@ function bindConductores(){
 function renderConfig(){
   renderRutas();renderConductores();
   const c=S.config;
-  $('#c-tol').value=c.tolPct;$('#c-crit').value=c.critFactor;$('#c-fuente').value=c.fuente;$('#c-tolcons').value=c.tolConsumo;$('#c-tolrep').value=c.tolRepeticion;$('#c-saltof').value=c.saltoFactor;$('#c-saltom').value=c.saltoMin;$('#c-nivmin').value=c.nivelMinGal??80;
+  $('#c-tol').value=c.tolPct;$('#c-crit').value=c.critFactor;$('#c-fuente').value=c.fuente;$('#c-tolcons').value=c.tolConsumo;$('#c-tolrep').value=c.tolRepeticion;$('#c-saltof').value=c.saltoFactor;$('#c-saltom').value=c.saltoMin;$('#c-nivmin').value=c.nivelMinGal??80;$('#c-nivmail').value=c.emailAvisos||'igcfuel@gmail.com';$('#c-nivmailon').value=c.emailAuto===false?'0':'1';
   $('#tbl-veh').innerHTML=S.vehiculos.length?`<tr><th>Placa</th><th class="n">Capacidad (gal)</th><th class="n">Estándar (gal/km)</th><th class="n">Ralentí (gal/h)</th><th></th></tr>`+
     S.vehiculos.map(v=>`<tr><td><b>${esc(v.placa)}</b></td><td class="n">${fmt(v.capacidad)}</td><td class="n">${fmt(v.std,3)}</td><td class="n">${fmt(v.ralenti,2)}</td><td class="n"><button class="btn sec sm" data-vh="${esc(v.placa)}">Editar</button> <button class="btn sec sm" data-vd="${esc(v.placa)}">Quitar</button></td></tr>`).join(''):'';
   $$('#tbl-veh [data-vh]').forEach(b=>b.onclick=()=>{const v=S.vehiculos.find(x=>x.placa===b.dataset.vh);$('#vh-placa').value=v.placa;$('#vh-cap').value=v.capacidad??'';$('#vh-std').value=v.std;$('#vh-ral').value=v.ralenti??''});
@@ -1615,6 +1641,8 @@ function bindConfig(){
   const m={'#c-tol':'tolPct','#c-crit':'critFactor','#c-tolcons':'tolConsumo','#c-tolrep':'tolRepeticion','#c-saltof':'saltoFactor','#c-saltom':'saltoMin','#c-nivmin':'nivelMinGal'};
   Object.entries(m).forEach(([s,k])=>$(s).onchange=()=>{const v=num($(s).value);if(v==null||v<0)return renderConfig();S.config[k]=v;save();renderAll()});
   $('#c-fuente').onchange=()=>{S.config.fuente=$('#c-fuente').value;save();renderAll()};
+  $('#c-nivmail').onchange=()=>{const v=$('#c-nivmail').value.trim();if(v&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){toast('Correo no válido');return renderConfig()}S.config.emailAvisos=v||'igcfuel@gmail.com';save();renderAll()};
+  $('#c-nivmailon').onchange=()=>{S.config.emailAuto=$('#c-nivmailon').value==='1';save();renderAll()};
   $('#f-veh').onsubmit=e=>{e.preventDefault();
     const v={placa:normPlaca($('#vh-placa').value),capacidad:num($('#vh-cap').value),std:num($('#vh-std').value),ralenti:num($('#vh-ral').value)};
     if(!v.placa||!v.std)return;const i=S.vehiculos.findIndex(x=>x.placa===v.placa);if(i>=0)S.vehiculos[i]=v;else S.vehiculos.push(v);
@@ -2614,6 +2642,50 @@ $('#m-mes').onchange=renderMensual;$('#m-vista').onchange=renderMensual;
 $('#g-mes').onchange=renderGerencial;$('#g-placa').onchange=renderGerencial;
 $$('.sel-base').forEach(s=>s.onchange=()=>{S.config.baseKm=s.value;save();renderAll()});
 bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();satLiveWire();satPdfWire();
+</script>
+<script type="text/plain" id="gs-correo">
+/**
+ * Correo.gs — envío de avisos de IGC FUEL CONTROL (combustible bajo).
+ * Instalación:
+ *  1) En su proyecto de Apps Script cree un archivo «Correo.gs» y pegue este contenido.
+ *  2) En doPost(e), como PRIMERAS líneas, agregue:
+ *       var mail = correoDoPost_(e); if (mail) return mail;
+ *  3) Ejecute una vez la función autorizarCorreo_ (acepte los permisos para enviar correo).
+ *  4) Implementar → Administrar implementaciones → ✏ → Versión: Nueva versión → Implementar.
+ * Seguridad: solo envía a las direcciones de la propiedad de script MAIL_TO
+ * (por defecto igcfuel@gmail.com; varias separadas por coma) y respeta APP_TOKEN si existe.
+ */
+function correoDoPost_(e) {
+  var req;
+  try { req = JSON.parse(e.postData.contents); } catch (err) { return null; }
+  if (!req || req.action !== 'sendEmail') return null;
+  var props = PropertiesService.getScriptProperties();
+  var tok = props.getProperty('APP_TOKEN');
+  if (tok && req.token !== tok) return correoJson_({ ok: false, error: 'Token inválido' });
+  var permitidos = (props.getProperty('MAIL_TO') || 'igcfuel@gmail.com')
+    .split(',').map(function (x) { return x.trim().toLowerCase(); });
+  var to = String(req.to || '').trim().toLowerCase();
+  if (permitidos.indexOf(to) < 0) to = permitidos[0];
+  try {
+    var o = {
+      to: to,
+      subject: String(req.subject || 'Aviso IGC Fuel Control').slice(0, 200),
+      body: String(req.body || ''),
+      name: 'IGC Fuel Control'
+    };
+    if (req.html) o.htmlBody = String(req.html);
+    MailApp.sendEmail(o);
+    return correoJson_({ ok: true, to: to });
+  } catch (err) {
+    return correoJson_({ ok: false, error: String(err) });
+  }
+}
+function correoJson_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+function autorizarCorreo_() {
+  MailApp.sendEmail('igcfuel@gmail.com', 'IGC Fuel Control: correo autorizado', 'El envío de avisos quedó autorizado.');
+}
 </script>
 </body>
 </html>
