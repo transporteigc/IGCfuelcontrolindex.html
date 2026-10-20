@@ -157,8 +157,8 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     <h2>Nivel estimado de combustible en el tanque</h2>
     <p class="muted small" style="margin-top:0">Se parte de la referencia más reciente (último tanqueo full = tanque lleno, o la última medición con regla del preoperacional), se suman los galones tanqueados después y se restan los galones estimados: km (odómetro y, después de la última lectura, Satrack diario) × estándar (gal/km) + ralentí × consumo de ralentí (gal/h). Si el nivel baja del mínimo configurado, se avisa para que el conductor tanquee ese día. Es una estimación: confírmela con la regla del tanque.</p>
     <div class="wrap"><table class="tbl" id="tbl-nivel"></table></div>
-    <div class="row" style="margin-top:8px"><button class="btn sec sm" type="button" id="nv-notif">Activar avisos del navegador</button><button class="btn sec sm" type="button" id="nv-test">Enviar correo de prueba</button><button class="btn sec sm" type="button" id="nv-gs">Descargar Correo.gs (instalación)</button></div>
-    <details class="man" style="margin-top:8px"><summary>Cómo activar el correo automático</summary><div class="small" style="margin-top:6px">El correo sale desde su Apps Script (el mismo de Google Sheets). Cuando un vehículo queda con el mínimo configurado o menos, el aplicativo envía <b>un correo por vehículo y por día</b> a la dirección de Configuración (por defecto igcfuel@gmail.com). Para activarlo:<ol><li>En su proyecto de Apps Script cree el archivo <b>Correo.gs</b> con el botón «Descargar Correo.gs».</li><li>En <b>doPost(e)</b>, como primeras líneas: <code>var mail = correoDoPost_(e); if (mail) return mail;</code></li><li>Ejecute una vez la función <b>autorizarCorreo_</b> y acepte los permisos.</li><li><b>Implementar → Administrar implementaciones → ✏ → Nueva versión → Implementar</b>.</li><li>Pulse «Enviar correo de prueba».</li></ol>Solo se envía a las direcciones de la propiedad de script <b>MAIL_TO</b> (por defecto igcfuel@gmail.com). El aviso se genera cuando el aplicativo está abierto y se registran datos (tanqueos, mediciones preoperacionales, informes Satrack).</div></details>
+    <div class="row" style="margin-top:8px"><button class="btn sec sm" type="button" id="nv-notif">Activar avisos del navegador</button><button class="btn sec sm" type="button" id="nv-test">Enviar correo de prueba</button><button class="btn sec sm" type="button" id="nv-gs">Descargar Code.gs (con correo)</button></div>
+    <details class="man" style="margin-top:8px"><summary>Cómo activar el correo automático</summary><div class="small" style="margin-top:6px">El correo sale desde su Apps Script (el mismo de Google Sheets). Cuando un vehículo queda con el mínimo configurado o menos, el aplicativo envía <b>un correo por vehículo y por día</b> a la dirección de Configuración (por defecto igcfuel@gmail.com). Para activarlo:<ol><li>Descargue <b>Code.gs</b> con el botón de arriba (es su mismo Code.gs con la acción <code>sendEmail</code> ya incluida) y reemplace el contenido de Code.gs en su proyecto. Si usted configuró <code>SHEET_ID</code> en el archivo, vuelva a escribirlo; el token (APP_TOKEN) no cambia.</li><li>Ejecute una vez la función <b>autorizarCorreo_</b> y acepte los permisos de envío de correo.</li><li><b>Implementar → Administrar implementaciones → ✏ → Nueva versión → Implementar</b>.</li><li>Pulse «Enviar correo de prueba».</li></ol>Solo se envía a las direcciones de la propiedad de script <b>MAIL_TO</b> (por defecto igcfuel@gmail.com). El aviso se genera cuando el aplicativo está abierto y se registran datos (tanqueos, mediciones preoperacionales, informes Satrack).</div></details>
   </div>
   <div class="card">
     <h2 id="t-titulo">Registrar tanqueo</h2>
@@ -1485,7 +1485,7 @@ function correoNivel(n,prueba){
   const L=[msgNivel(n),'','Vehículo: '+n.placa,'Conductor: '+(n.cond||'—'),'Nivel estimado: '+fmt(n.nivel,0)+' gal'+(n.cap>0?' de '+fmt(n.cap,0):''),'Mínimo configurado: '+fmt(n.min,0)+' gal','Autonomía aproximada: '+fmt(n.aut,0)+' km','Referencia: '+n.ref,'Km desde la referencia: '+fmt(n.kmTot,0)+' (odómetro '+fmt(n.kmOdo,0)+' + Satrack '+fmt(n.kmSat,0)+')','Ralentí desde la referencia: '+fmt(n.ralH,1)+' h','Tanqueado después de la referencia: '+fmt(n.added,1)+' gal','Datos hasta: '+fd(dIso(n.hasta)),'','Estimación de IGC FUEL CONTROL: confírmela con la regla del tanque.'];
   return{to:mailTo(),subject:(prueba?'[PRUEBA] ':'')+'⛽ Combustible bajo · '+n.placa+' · ~'+fmt(n.nivel,0)+' gal (mínimo '+fmt(n.min,0)+')',body:(prueba?'ESTE ES UN CORREO DE PRUEBA.\n\n':'')+L.join('\n'),html:'<div style="font-family:Arial,sans-serif;font-size:14px">'+(prueba?'<b>ESTE ES UN CORREO DE PRUEBA.</b><br><br>':'')+L.map(l=>l?'<div>'+esc(l)+'</div>':'<br>').join('')+'</div>'};
 }
-const errCorreo=e=>/no soportada|unsupported|not supported/i.test(e.message||'')?'El Apps Script aún no tiene Correo.gs (descárguelo, instálelo y publique una nueva versión)':(e.message||String(e));
+const errCorreo=e=>/no soportada|unsupported|not supported/i.test(e.message||'')?'El Apps Script aún no tiene el envío de correo (reemplace Code.gs por el nuevo, ejecute autorizarCorreo_ y publique una nueva versión)':(e.message||String(e));
 function chequearCorreoNivel(N){
   const hoy=dIso(Date.now()),cfg=S.config;cfg.avisoCorreo=cfg.avisoCorreo||{};window._nvTry=window._nvTry||{};window._nvErr=window._nvErr||{};
   N.forEach(n=>{
@@ -1510,7 +1510,7 @@ function renderNivelComb(){
   const tb=$('#nv-test');if(tb)tb.onclick=async()=>{if(!CL.url)return toast('Primero configure la URL del Apps Script (pestaña Configuración)');
     const n=N[0]||{placa:'PRUEBA',nivel:75,min:nivMin(),cap:160,aut:375,ref:'ejemplo',kmTot:0,kmOdo:0,kmSat:0,ralH:0,added:0,hasta:Date.now(),cond:''};
     try{tb.disabled=true;const m=correoNivel(n,true);await cloud('sendEmail',m);toast('📧 Correo de prueba enviado a '+m.to)}catch(e){toast('No se pudo enviar: '+errCorreo(e))}finally{tb.disabled=false}};
-  const gb=$('#nv-gs');if(gb)gb.onclick=()=>{const u=URL.createObjectURL(new Blob([$('#gs-correo').textContent],{type:'text/plain'})),a=document.createElement('a');a.href=u;a.download='Correo.gs';a.click();setTimeout(()=>URL.revokeObjectURL(u),5000)};
+  const gb=$('#nv-gs');if(gb)gb.onclick=()=>{const u=URL.createObjectURL(new Blob([$('#gs-correo').textContent],{type:'text/plain'})),a=document.createElement('a');a.href=u;a.download='Code.gs';a.click();setTimeout(()=>URL.revokeObjectURL(u),5000)};
   const nb=$('#nv-notif');if(nb){nb.style.display=('Notification' in window&&Notification.permission==='default')?'':'none';nb.onclick=()=>{try{Notification.requestPermission().then(()=>renderNivelComb())}catch(e){}}}
   try{if('Notification' in window&&Notification.permission==='granted')bajos.forEach(n=>{const k='igc_nv_'+dIso(Date.now())+'_'+n.placa;if(!localStorage.getItem(k)){new Notification('Combustible bajo · '+n.placa,{body:msgNivel(n)});localStorage.setItem(k,'1')}})}catch(e){}
 }
@@ -2645,46 +2645,546 @@ bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();init
 </script>
 <script type="text/plain" id="gs-correo">
 /**
- * Correo.gs — envío de avisos de IGC FUEL CONTROL (combustible bajo).
- * Instalación:
- *  1) En su proyecto de Apps Script cree un archivo «Correo.gs» y pegue este contenido.
- *  2) En doPost(e), como PRIMERAS líneas, agregue:
- *       var mail = correoDoPost_(e); if (mail) return mail;
- *  3) Ejecute una vez la función autorizarCorreo_ (acepte los permisos para enviar correo).
- *  4) Implementar → Administrar implementaciones → ✏ → Versión: Nueva versión → Implementar.
- * Seguridad: solo envía a las direcciones de la propiedad de script MAIL_TO
- * (por defecto igcfuel@gmail.com; varias separadas por coma) y respeta APP_TOKEN si existe.
+ * IGC FUEL CONTROL · Backend en Google Apps Script
+ * Google Sheets como base principal de datos.
+ *
+ * IMPORTANTE:
+ * 1. Este archivo es Code.gs.
+ * 2. Mantenga Satrack.gs en el MISMO proyecto.
+ * 3. Las acciones satrack_* se delegan a satrackDoPost_(e).
+ * 4. La consulta histórica de recorridos debe implementarse
+ *    con el endpoint autorizado por Satrack.
+ * 5. Avisos por correo (combustible bajo): acción «sendEmail».
+ *    Ejecute una vez autorizarCorreo_() y publique una Nueva versión.
  */
-function correoDoPost_(e) {
-  var req;
-  try { req = JSON.parse(e.postData.contents); } catch (err) { return null; }
-  if (!req || req.action !== 'sendEmail') return null;
-  var props = PropertiesService.getScriptProperties();
-  var tok = props.getProperty('APP_TOKEN');
-  if (tok && req.token !== tok) return correoJson_({ ok: false, error: 'Token inválido' });
-  var permitidos = (props.getProperty('MAIL_TO') || 'igcfuel@gmail.com')
-    .split(',').map(function (x) { return x.trim().toLowerCase(); });
-  var to = String(req.to || '').trim().toLowerCase();
-  if (permitidos.indexOf(to) < 0) to = permitidos[0];
-  try {
-    var o = {
-      to: to,
-      subject: String(req.subject || 'Aviso IGC Fuel Control').slice(0, 200),
-      body: String(req.body || ''),
-      name: 'IGC Fuel Control'
-    };
-    if (req.html) o.htmlBody = String(req.html);
-    MailApp.sendEmail(o);
-    return correoJson_({ ok: true, to: to });
-  } catch (err) {
-    return correoJson_({ ok: false, error: String(err) });
+
+const COLS = [
+  'config',
+  'vehiculos',
+  'conductores',
+  'rutas',
+  'tanqueos',
+  'viajes',
+  'satrack',
+  'satLotes',
+  'facturas',
+  'preop'
+];
+
+const JSON_COL = '_json';
+
+// Si Apps Script se creó desde Google Sheets,
+// deje vacío este campo.
+// Si se creó desde script.google.com, coloque
+// el ID de la hoja entre /d/ y /edit.
+const SHEET_ID = '';
+
+// Correo que recibe los avisos de combustible bajo.
+// Se puede cambiar con la propiedad de script MAIL_TO
+// (varias direcciones separadas por coma).
+const MAIL_TO_DEFECTO = 'igcfuel@gmail.com';
+
+/* ========================= UTILIDADES ========================= */
+
+function props_() {
+  return PropertiesService.getScriptProperties();
+}
+
+function ss_() {
+  const id = SHEET_ID || props_().getProperty('SHEET_ID');
+
+  const ss = id
+    ? SpreadsheetApp.openById(id)
+    : SpreadsheetApp.getActiveSpreadsheet();
+
+  if (!ss) {
+    throw new Error(
+      'El script no está enlazado a una hoja. ' +
+      'Pegue el ID en SHEET_ID o abra Apps Script ' +
+      'desde Google Sheets > Extensiones > Apps Script.'
+    );
+  }
+
+  return ss;
+}
+
+function out_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function checkToken_(token) {
+  const real = props_().getProperty('APP_TOKEN');
+
+  if (!real) {
+    throw new Error(
+      'El script no tiene APP_TOKEN. Ejecute configurar() en Apps Script.'
+    );
+  }
+
+  if (!token || String(token) !== String(real)) {
+    throw new Error('Token inválido');
   }
 }
-function correoJson_(o) {
-  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+
+/* ========================= CONFIGURACIÓN ========================= */
+
+function configurar() {
+  const ss = ss_();
+
+  COLS.forEach(function(nombre) {
+    if (!ss.getSheetByName(nombre)) {
+      ss.insertSheet(nombre);
+    }
+  });
+
+  const primera =
+    ss.getSheetByName('Hoja 1') ||
+    ss.getSheetByName('Sheet1');
+
+  if (
+    primera &&
+    ss.getSheets().length > 1 &&
+    primera.getLastRow() === 0
+  ) {
+    ss.deleteSheet(primera);
+  }
+
+  let token = props_().getProperty('APP_TOKEN');
+
+  if (!token) {
+    token =
+      Utilities.getUuid().replace(/-/g, '') +
+      Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+
+    props_().setProperty('APP_TOKEN', token);
+  }
+
+  Logger.log(
+    'Hojas listas. TOKEN para el aplicativo: ' + token
+  );
 }
+
+/* ========================= PUNTOS DE ENTRADA ========================= */
+
+function doGet() {
+  return out_({
+    ok: true,
+    msg: 'IGC FUEL CONTROL: servicio activo'
+  });
+}
+
+function doPost(e) {
+  try {
+
+    /*
+     * IMPORTANTE:
+     * Primero delegamos las acciones Satrack al archivo
+     * Satrack.gs. Esa función valida APP_TOKEN y devuelve
+     * null cuando la acción no corresponde a Satrack.
+     */
+
+    if (typeof satrackDoPost_ === 'function') {
+      const respuestaSatrack = satrackDoPost_(e);
+
+      if (respuestaSatrack) {
+        return respuestaSatrack;
+      }
+    }
+
+    const req = JSON.parse(
+      (e && e.postData && e.postData.contents) || '{}'
+    );
+
+    checkToken_(req.token);
+
+    switch (req.action) {
+
+      case 'loadAll':
+        return out_({
+          ok: true,
+          data: loadAll_()
+        });
+
+      case 'saveAll':
+        return out_({
+          ok: true,
+          saved: saveAll_(req.data || {})
+        });
+
+      case 'uploadFile':
+        return out_(uploadFile_(req));
+
+      case 'sendEmail':
+        return out_(sendEmail_(req));
+
+      case 'ping':
+        return out_({
+          ok: true,
+          pong: true
+        });
+
+      /*
+       * Estas acciones no se simulan con la última
+       * lectura del vehículo.
+       *
+       * Hasta implementar la consulta histórica real,
+       * se devuelve un error explícito.
+       */
+
+      case 'satrack_dia':
+      case 'satrack_ultimo':
+        return out_({
+          ok: false,
+          code: 'SAT_HISTORIAL_NO_IMPLEMENTADO',
+          error:
+            'La consulta histórica de recorridos aún no está ' +
+            'implementada. La última telemetría de Satrack no ' +
+            'sustituye el historial diario. Se requiere el ' +
+            'endpoint histórico autorizado por Satrack.'
+        });
+
+      default:
+        throw new Error(
+          'Acción no soportada: ' + req.action
+        );
+    }
+
+  } catch (err) {
+
+    return out_({
+      ok: false,
+      error: String((err && err.message) || err),
+      code: (err && err.code) || ''
+    });
+
+  }
+}
+
+/* ========================= LECTURA DE GOOGLE SHEETS ========================= */
+
+function loadAll_() {
+  const ss = ss_();
+  const data = {};
+
+  COLS.forEach(function(nombre) {
+    data[nombre] = readSheet_(
+      ss.getSheetByName(nombre)
+    );
+  });
+
+  return data;
+}
+
+function readSheet_(sh) {
+  if (!sh || sh.getLastRow() < 2) {
+    return [];
+  }
+
+  const valores = sh.getDataRange().getValues();
+  const indice = valores[0].indexOf(JSON_COL);
+
+  if (indice < 0) {
+    return [];
+  }
+
+  const filas = [];
+
+  for (let r = 1; r < valores.length; r++) {
+    const texto = valores[r][indice];
+
+    if (texto) {
+      try {
+        filas.push(JSON.parse(texto));
+      } catch (err) {
+        // Se omite la fila cuyo JSON esté dañado.
+      }
+    }
+  }
+
+  return filas;
+}
+
+/* ========================= ESCRITURA DE GOOGLE SHEETS ========================= */
+
+function saveAll_(data) {
+  const lock = LockService.getScriptLock();
+
+  lock.waitLock(25000);
+
+  try {
+    const saved = {};
+
+    COLS.forEach(function(nombre) {
+
+      if (Array.isArray(data[nombre])) {
+
+        writeSheet_(nombre, data[nombre]);
+
+        saved[nombre] = data[nombre].length;
+
+      }
+
+    });
+
+    return saved;
+
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function cell_(valor) {
+  if (valor === null || valor === undefined) {
+    return '';
+  }
+
+  if (typeof valor === 'object') {
+    return JSON.stringify(valor);
+  }
+
+  if (typeof valor === 'string') {
+
+    if (valor.length > 45000) {
+      valor = valor.slice(0, 45000);
+    }
+
+    // Evita que Sheets interprete texto como fórmulas,
+    // fechas o valores numéricos involuntariamente.
+    if (
+      /^(\d{4}-\d{2}-\d{2}|\d{1,2}[:\/]\d{1,2}|\d+([.,]\d+)?$|[=+\-@])/
+        .test(valor)
+    ) {
+      return "'" + valor;
+    }
+
+    return valor;
+  }
+
+  return valor;
+}
+
+function writeSheet_(nombre, filas) {
+  const ss = ss_();
+
+  const sh =
+    ss.getSheetByName(nombre) ||
+    ss.insertSheet(nombre);
+
+  const claves = [];
+
+  filas.forEach(function(fila) {
+    Object.keys(fila).forEach(function(clave) {
+      if (claves.indexOf(clave) < 0) {
+        claves.push(clave);
+      }
+    });
+  });
+
+  const encabezado = claves.concat([JSON_COL]);
+
+  const valores = [
+    encabezado
+  ].concat(
+    filas.map(function(fila) {
+
+      return claves.map(function(clave) {
+        return cell_(fila[clave]);
+      }).concat([
+        JSON.stringify(fila)
+      ]);
+
+    })
+  );
+
+  if (sh.getMaxColumns() < encabezado.length) {
+    sh.insertColumnsAfter(
+      sh.getMaxColumns(),
+      encabezado.length - sh.getMaxColumns()
+    );
+  }
+
+  if (sh.getMaxRows() < valores.length) {
+    sh.insertRowsAfter(
+      sh.getMaxRows(),
+      valores.length - sh.getMaxRows()
+    );
+  }
+
+  sh.showColumns(1, sh.getMaxColumns());
+  sh.clear();
+
+  sh.getRange(
+    1,
+    1,
+    valores.length,
+    encabezado.length
+  ).setValues(valores);
+
+  sh.setFrozenRows(1);
+
+  sh.getRange(
+    1,
+    1,
+    1,
+    encabezado.length
+  )
+    .setFontWeight('bold')
+    .setBackground('#002e42')
+    .setFontColor('#ffffff');
+
+  sh.hideColumns(encabezado.length);
+}
+
+/* ========================= ARCHIVOS EN DRIVE ========================= */
+
+function folder_(propName, folderName) {
+  const p = props_();
+  const id = p.getProperty(propName);
+
+  if (id) {
+    try {
+      return DriveApp.getFolderById(id);
+    } catch (err) {
+      // Se crea una carpeta nueva si la anterior no existe.
+    }
+  }
+
+  const carpeta = DriveApp.createFolder(folderName);
+
+  p.setProperty(propName, carpeta.getId());
+
+  return carpeta;
+}
+
+function uploadFile_(req) {
+  if (!req.b64) {
+    throw new Error('Archivo vacío');
+  }
+
+  const blob = Utilities.newBlob(
+    Utilities.base64Decode(req.b64),
+    req.mime || 'application/octet-stream',
+    req.name || 'archivo'
+  );
+
+  const archivo = folder_(
+    'DRIVE_FOLDER_ID',
+    'IGC Fuel Control - Informes'
+  ).createFile(blob);
+
+  return {
+    ok: true,
+    url: archivo.getUrl(),
+    id: archivo.getId()
+  };
+}
+
+/* ========================= CORREO AUTOMÁTICO (COMBUSTIBLE BAJO) ========================= */
+
+/*
+ * Envía el aviso que genera el aplicativo cuando un vehículo
+ * queda con el mínimo configurado de galones o menos.
+ *
+ * Seguridad: el token ya se validó en doPost. Además solo se
+ * envía a las direcciones de la propiedad de script MAIL_TO
+ * (por defecto MAIL_TO_DEFECTO); cualquier otra dirección que
+ * llegue en la petición se reemplaza por la primera permitida.
+ */
+function sendEmail_(req) {
+  const permitidos = (props_().getProperty('MAIL_TO') || MAIL_TO_DEFECTO)
+    .split(',')
+    .map(function(x) { return x.trim().toLowerCase(); })
+    .filter(function(x) { return x; });
+
+  let to = String(req.to || '').trim().toLowerCase();
+
+  if (permitidos.indexOf(to) < 0) {
+    to = permitidos[0];
+  }
+
+  const opciones = {
+    to: to,
+    subject: String(req.subject || 'Aviso IGC Fuel Control').slice(0, 200),
+    body: String(req.body || ''),
+    name: 'IGC Fuel Control'
+  };
+
+  if (req.html) {
+    opciones.htmlBody = String(req.html);
+  }
+
+  MailApp.sendEmail(opciones);
+
+  return {
+    ok: true,
+    to: to
+  };
+}
+
+// Ejecútela UNA vez desde el editor para autorizar el envío de correo.
 function autorizarCorreo_() {
-  MailApp.sendEmail('igcfuel@gmail.com', 'IGC Fuel Control: correo autorizado', 'El envío de avisos quedó autorizado.');
+  MailApp.sendEmail(
+    (props_().getProperty('MAIL_TO') || MAIL_TO_DEFECTO).split(',')[0].trim(),
+    'IGC Fuel Control: correo autorizado',
+    'El envío de avisos de combustible bajo quedó autorizado.'
+  );
+}
+
+/* ========================= RESPALDO DIARIO ========================= */
+
+function respaldoDiario() {
+  const ss = ss_();
+
+  const carpeta = folder_(
+    'BACKUP_FOLDER_ID',
+    'IGC Fuel Control - Respaldos'
+  );
+
+  const fecha = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    'yyyy-MM-dd'
+  );
+
+  DriveApp.getFileById(ss.getId()).makeCopy(
+    ss.getName() + ' - respaldo ' + fecha,
+    carpeta
+  );
+
+  const archivos = [];
+  const iterador = carpeta.getFiles();
+
+  while (iterador.hasNext()) {
+    archivos.push(iterador.next());
+  }
+
+  archivos.sort(function(a, b) {
+    return b.getDateCreated() - a.getDateCreated();
+  });
+
+  archivos.slice(14).forEach(function(archivo) {
+    archivo.setTrashed(true);
+  });
+}
+
+function crearTriggerRespaldo() {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+
+    if (
+      trigger.getHandlerFunction() === 'respaldoDiario'
+    ) {
+      ScriptApp.deleteTrigger(trigger);
+    }
+
+  });
+
+  ScriptApp.newTrigger('respaldoDiario')
+    .timeBased()
+    .everyDays(1)
+    .atHour(2)
+    .create();
 }
 </script>
 </body>
