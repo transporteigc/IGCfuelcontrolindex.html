@@ -365,7 +365,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
   </div>
   <div class="card" id="sat-pdf-card">
     <h2>Estadísticas de Satrack por intervalo entre tanqueos (PDF)</h2>
-    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack, <b>uno por día</b> (informe diario) o para el intervalo entre dos tanqueos. El sistema intenta leer del PDF el vehículo, las fechas y las <b>horas de ralentí</b>; usted confirma o corrige antes de guardar. Del PDF <b>solo se toma el ralentí</b>: los km recorridos salen del informe Excel (o de la API) y no se modifican. El PDF queda adjunto en «Informes cargados».</p>
+    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack, <b>uno por día</b> (informe diario) o para el intervalo entre dos tanqueos. Al adjuntarlos, el sistema lee <b>solo</b> el vehículo, el día y las <b>horas de ralentí</b> y los guarda de inmediato en el día correspondiente (si el PDF trae una tabla con varios días, cada fila va a su día). Únicamente cuando no logra identificar con seguridad el vehículo, el día o el ralentí, deja el PDF más abajo para que usted lo confirme. Del PDF <b>solo se toma el ralentí</b>: los km recorridos salen del informe Excel (o de la API) y no se modifican. El PDF queda adjunto en «Informes cargados».</p>
     <div class="row"><button class="btn" type="button" id="sp-btn">Adjuntar PDF(s) de estadísticas</button><input type="file" id="sp-file" accept=".pdf,application/pdf" multiple hidden></div>
     <div id="sp-out" style="margin-top:12px"></div>
   </div>
@@ -2555,27 +2555,66 @@ function spLeer(L){
   const pk=[/(?:km|kilometros)\s+recorridos?[^0-9\n]{0,30}(\d[\d.,]*)/,/distancia\s+(?:total\s+)?(?:recorrida)?[^0-9\n]{0,30}(\d[\d.,]*)/,/(?:total\s+)?recorrido(?:\s+total)?[^0-9\n]{0,30}(\d[\d.,]*)/,/kilometraje[^0-9\n]{0,30}(\d[\d.,]*)/,/(?:distancia|recorrido)[^0-9\n]{0,40}(\d[\d.,]*)/];
   for(const re of pk){for(const l of N){const m=l.match(re);if(m){const v=parseKm(m[1]);if(v!=null&&v>=0){res.km=v;break}}}if(res.km!=null)break}
   for(const l of N){const m=l.match(/ralenti[^0-9\n]{0,30}(\d{1,4}:\d{2}(?::\d{2})?|\d+\s*h\w*(?:\s*\d+\s*m\w*)?|\d[\d.,]*)/);if(m){const v=spHoras(m[1],l);if(v!=null){res.ral=v;break}}}
-  const ds=[],re=/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})|(\d{4})-(\d{2})-(\d{2})/g;let m;
-  while((m=re.exec(all))){const y=m[3]?+m[3]:+m[4],mo=m[3]?+m[2]:+m[5],d=m[3]?+m[1]:+m[6];if(mo>=1&&mo<=12&&d>=1&&d<=31&&y>2000)ds.push(new Date(y,mo-1,d).getTime())}
+  const allD=N.filter(l=>!/generad|impres|emisi|exportad/.test(l)).join('\n'),ds=[],re=/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})|(\d{4})-(\d{2})-(\d{2})/g;let m;
+  while((m=re.exec(allD))){const y=m[3]?+m[3]:+m[4],mo=m[3]?+m[2]:+m[5],d=m[3]?+m[1]:+m[6];if(mo>=1&&mo<=12&&d>=1&&d<=31&&y>2000)ds.push(new Date(y,mo-1,d).getTime())}
   if(ds.length){res.t0=Math.min(...ds);res.t1=Math.max(...ds)+DIA-60000}
   return res}
+let SPLOG=[];
+const spFechaRe=/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})|(\d{4})-(\d{2})-(\d{2})/;
+function spFechaIso(t){const m=String(t).match(spFechaRe);if(!m)return null;const y=m[3]?+m[3]:+m[4],mo=m[3]?+m[2]:+m[5],d=m[3]?+m[1]:+m[6];return(mo>=1&&mo<=12&&d>=1&&d<=31&&y>2000)?y+'-'+pad(mo)+'-'+pad(d):null}
+/* Tabla por día dentro del PDF: encabezado con «Ralentí» + filas con fecha. Devuelve una fila por día (y vehículo). */
+function spFilasDia(L,pls,placaDoc){
+  let hdr=null,ci=-1;const filas=[];let incompleto=false;
+  L.forEach(r=>{const c=(Array.isArray(r)?r:[String(r)]).map(x=>String(x)),nc=c.map(norm),ri=nc.findIndex(x=>/ralent|idle/.test(x));
+    if(ri>=0&&c.length>=3&&!nc.some(x=>/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}|\d+:\d{2}/.test(x))){hdr=nc;ci=ri;return}
+    if(!hdr)return;
+    const dia=c.map(spFechaIso).find(Boolean);if(!dia)return;
+    const tx=normPlaca(c.join(' ')),placa=pls.find(p=>tx.includes(p))||placaDoc||'';
+    const v=c.length===hdr.length?spHoras(norm(c[ci]),hdr[ci]):null;
+    if(v==null||v<0){incompleto=true;return}
+    filas.push({dia,placa,ral:v})});
+  return{filas,incompleto}}
+/* Guarda el ralentí de cada día directamente (reemplaza el ralentí PDF previo del mismo vehículo y día). No toca los km. */
+async function spAuto(file,regs){
+  const lote=uid();
+  S.satLotes.push({id:lote,archivo:file.name,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:[...new Set(regs.map(g=>g.placa))].join(', ')+' · '+(regs.length>1?regs.length+' días':fd(regs[0].dia)+' (día)')+' · solo ralentí (diario, automático)'});
+  regs.forEach(g=>{const t0=new Date(g.dia+'T00:00:00').getTime(),t1=t0+DIA-60000,dentro=x=>x.placa===g.placa&&satMid(x)>t0&&satMid(x)<=t1,sinKm=!S.satrack.some(x=>dentro(x)&&!x.soloRal);
+    S.satrack=S.satrack.filter(x=>!(dentro(x)&&x.soloRal));
+    S.satrack.push({id:uid(),placa:g.placa,t0,t1,km:0,ralentiH:g.ral,lote,soloRal:true});
+    SPLOG.unshift({nombre:file.name,placa:g.placa,dia:g.dia,ral:g.ral,sinKm})});
+  try{await fPut('satpdf:'+lote,file)}catch(e){}
+  subirArchivoSat(lote,file)}
 async function satPdfAbrir(files){
   const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))];
-  toast('Leyendo PDF…');
+  toast('Leyendo PDF…');let nDia=0,nArch=0,nRev=0;
   for(const file of files){
     if(!/\.pdf$/i.test(file.name))continue;
     let L=[],aviso='';
     try{if(typeof pdfjsLib==='undefined')throw new Error('sin pdf.js');L=await pdfRows(file)}catch(e){aviso='No se pudo leer el texto del PDF (escaneo o sin conexión a la librería): digite los datos.'}
     const txt=L.map(x=>x.join(' ')).join('\n'),r={id:uid(),file,nombre:file.name,placa:'',key:'',km:null,ral:null,mt0:'',mt1:'',dia:'',aviso,txt:txt.slice(0,4000)};
+    let auto=null;
     if(L.length){const x=spLeer(L);r.km=x.km;r.ral=x.ral;const tx=normPlaca(txt);r.placa=pls.find(p=>tx.includes(p))||'';
-      if(r.placa&&x.t0!=null){let best=null,sc=Infinity;spIntervalos(r.placa).forEach(iv=>{const s=Math.abs(iv.t0-x.t0)+Math.abs(iv.t1-x.t1);if(s<sc){sc=s;best=iv}});if(best&&sc<=3*DIA)r.key=best.key}
-      if(x.t0!=null&&x.t1-x.t0<DIA){r.key='__d';r.dia=dIso(x.t0)}}/* informe de un solo día → diario */
-    SP.push(r)}
-  spRender()}
+      /* 1) tabla con una fila por día */
+      const F=spFilasDia(L,pls,r.placa);
+      if(F.filas.length&&!F.incompleto){const G={};F.filas.forEach(f=>{const k=f.placa+'|'+f.dia;G[k]=G[k]||{placa:f.placa,dia:f.dia,ral:0};G[k].ral+=f.ral});
+        const regs=Object.values(G);if(regs.every(g=>g.placa&&g.ral<=24))auto=regs}
+      /* 2) informe de un solo día */
+      if(!auto&&x.t0!=null&&x.t1-x.t0<DIA&&r.placa&&x.ral!=null&&x.ral>=0&&x.ral<=24)auto=[{placa:r.placa,dia:dIso(x.t0),ral:x.ral}];
+      if(!auto){if(r.placa&&x.t0!=null){let best=null,sc=Infinity;spIntervalos(r.placa).forEach(iv=>{const s=Math.abs(iv.t0-x.t0)+Math.abs(iv.t1-x.t1);if(s<sc){sc=s;best=iv}});if(best&&sc<=3*DIA)r.key=best.key}
+        if(x.t0!=null&&x.t1-x.t0<DIA){r.key='__d';r.dia=dIso(x.t0)}}}
+    if(auto){await spAuto(file,auto);nDia+=auto.length;nArch++}
+    else{SP.push(r);nRev++}}
+  if(nArch){S.satLotes=S.satLotes.filter(x=>!x.pdf||S.satrack.some(y=>y.lote===x.id));save();renderAll()}
+  spRender();
+  toast(nArch?nArch+' PDF(s) cargado(s): ralentí de '+nDia+' día(s) ubicado(s) automáticamente'+(nRev?' · '+nRev+' requiere(n) su confirmación':''):(nRev?nRev+' PDF(s) requiere(n) su confirmación (no se identificó con seguridad vehículo, día o ralentí)':'Sin archivos PDF'))}
+function spLogHtml(){
+  if(!SPLOG.length)return'';
+  const rows=SPLOG.slice(0,60).map(x=>`<tr><td>${esc(x.nombre)}</td><td><b>${esc(x.placa)}</b></td><td>${fd(x.dia)}</td><td class="n">${fmt(x.ral,2)} h</td><td>${x.sinKm?'<span class="small bad">Falta el Excel/API de ese día (km)</span>':'<span class="small good">Km Satrack del día disponibles</span>'}</td></tr>`).join('');
+  return `<h3>Ralentí cargado automáticamente</h3><div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Día</th><th class="n">Ralentí</th><th>Km Satrack del día</th></tr>${rows}</table></div><p class="muted small">Cada PDF se asignó solo al vehículo y al día que trae. Si vuelve a cargar el PDF de un día ya cargado, su ralentí se reemplaza (no se duplica). Para corregir un día, cargue de nuevo el PDF o elimínelo en «Informes cargados».</p>`}
 function spRender(){
-  const o=$('#sp-out');if(!SP.length){o.innerHTML='';return}
+  const o=$('#sp-out'),lg=spLogHtml();if(!SP.length){o.innerHTML=lg;return}
   const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].sort();
-  o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Informe de un día o intervalo entre tanqueos</th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
+  o.innerHTML=lg+(lg?'<h3>Requieren su confirmación</h3>':'')+'<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Informe de un día o intervalo entre tanqueos</th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
     return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':r.ral!=null?'good':'muted'}">${r.aviso?esc(r.aviso):(r.ral!=null?'Ralentí leído del PDF: verifíquelo':'No se detectó el ralentí: digítelo')}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
     <td><select data-sp="placa" data-i="${i}"><option value="">—</option>${pls.map(p=>`<option ${p===r.placa?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
     <td><select data-sp="key" data-i="${i}"><option value="">— Seleccione —</option><option value="__d" ${r.key==='__d'?'selected':''}>Un solo día (informe diario)</option>${iv.map(x=>`<option value="${esc(x.key)}" ${x.key===r.key?'selected':''}>${esc(x.txt)}</option>`).join('')}<option value="__m" ${r.key==='__m'?'selected':''}>Otro intervalo (manual)</option></select>${r.key==='__d'?`<div class="row" style="margin-top:6px"><input type="date" data-sp="dia" data-i="${i}" value="${esc(r.dia)}"></div>`:''}${r.key==='__m'?`<div class="row" style="margin-top:6px"><input type="datetime-local" data-sp="mt0" data-i="${i}" value="${esc(r.mt0)}"><input type="datetime-local" data-sp="mt1" data-i="${i}" value="${esc(r.mt1)}"></div>`:''}</td>
