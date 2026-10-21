@@ -508,7 +508,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
 
   <div class="card">
     <h2>Google Sheets (Apps Script) y facturas</h2>
-    <p class="muted small" style="margin-top:0">Google Sheets es la base principal: cada cambio se guarda allí y al abrir el aplicativo (y al volver a él) se descarga lo que hay en la hoja, incluida toda la configuración. Para no repetir la conexión en cada equipo use el enlace o código de conexión de más abajo. Los pasos de instalación están en Code.gs. Los secretos de Satrack se guardan en las propiedades del script, nunca en este archivo.</p>
+    <p class="muted small" style="margin-top:0">Google Sheets es la base principal: cada cambio se guarda allí y al abrir el aplicativo (y al volver a él) se descarga lo que hay en la hoja, incluida toda la configuración. Para no repetir la conexión en cada equipo use «Generar copia con conexión incluida» (más abajo). Los pasos de instalación están en Code.gs. Los secretos de Satrack se guardan en las propiedades del script, nunca en este archivo.</p>
     <div class="grid">
       <div><label>URL de la aplicación web (Apps Script)</label><input id="cl-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
       <div><label>Token de acceso (APP_TOKEN)</label><input id="cl-tok" type="password"></div>
@@ -521,10 +521,6 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     <h3 style="margin-top:16px">Archivo con conexión incluida (para todos los dispositivos)</h3>
     <p class="muted small" style="margin-top:0"><b>Hágalo una sola vez</b> en el equipo ya conectado: pulse «Generar copia con conexión incluida» y use el archivo descargado en todos los dispositivos. Al abrirlo se conecta y descarga todo de Google Sheets sin pedir configuración. El archivo contiene el token de acceso: no lo publique en un sitio abierto. Si cambia la URL o el token, genere la copia de nuevo.</p>
     <div class="row"><button class="btn" id="cl-gen" type="button">⬇ Generar copia con conexión incluida</button></div>
-    <h3 style="margin-top:16px">Alternativa: conectar un dispositivo con enlace o código</h3>
-    <p class="muted small" style="margin-top:0">En este equipo (ya conectado) pulse «Copiar enlace / código». En el otro dispositivo abra el enlace, o pegue el código abajo y pulse «Aplicar». Quien tenga el enlace o código puede leer y modificar sus datos: compártalo solo con personas autorizadas y por un canal privado.</p>
-    <div class="row"><button class="btn sec" id="cl-link" type="button">📋 Copiar enlace / código de conexión</button></div>
-    <div class="grid" style="margin-top:8px"><div><label>Pegar enlace o código de conexión</label><input id="cl-code" placeholder="https://…#cfg=… o código" autocomplete="off" spellcheck="false"></div><div class="row" style="align-self:end"><button class="btn sec" id="cl-apply" type="button">Aplicar y sincronizar</button></div></div>
     <div id="dx-out" style="display:none;margin-top:14px"></div>
   </div>
 
@@ -2342,10 +2338,7 @@ function initExtra(){
   t=t.replace(RX,()=>'const CONEXION_FIJA='+JSON.stringify({url:CL.url,token:CL.token})+';');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/html;charset=utf-8'}));a.download='IGC_FUEL_CONTROL_con_conexion.html';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   toast('Listo: use «IGC_FUEL_CONTROL_con_conexion.html» en todos sus dispositivos')};
- $('#cl-link').onclick=async()=>{if(!cnxValida(CL))return toast('Primero guarde una URL y un token válidos');
-  const cod=cnxCodigo(CL),web=/^https?:$/.test(location.protocol),txt=web?location.href.split('#')[0]+'#cfg='+cod:cod;
-  try{await navigator.clipboard.writeText(txt);toast(web?'Enlace de conexión copiado':'Código de conexión copiado (este archivo no está publicado en la web: en el otro dispositivo abra el aplicativo y péguelo en «Aplicar»)')}catch(e){prompt('Copie este '+(web?'enlace':'código')+':',txt)}};
- $('#cl-apply').onclick=()=>{const c=cnxLeer($('#cl-code').value);if(!c)return toast('Enlace o código no válido');CL=c;localStorage.setItem(CK,JSON.stringify(CL));$('#cl-code').value='';renderCloudCfg();pulled=false;pull().then(()=>{if(!pulled)diagnosticar()})};
+  
  {const sy=$('#sync');sy.title='Clic para diagnosticar la conexión con Google Sheets';sy.onclick=()=>{goTab('config');diagnosticar()}}
  renderCloudCfg()}
 
