@@ -508,7 +508,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
 
   <div class="card">
     <h2>Google Sheets (Apps Script) y facturas</h2>
-    <p class="muted small" style="margin-top:0">Google Sheets es la base principal: cada cambio se guarda allí y al abrir el aplicativo se descarga lo que hay en la hoja. Los pasos de instalación están en Code.gs. Los secretos de Satrack se guardan en las propiedades del script, nunca en este archivo.</p>
+    <p class="muted small" style="margin-top:0">Google Sheets es la base principal: cada cambio se guarda allí y al abrir el aplicativo (y al volver a él) se descarga lo que hay en la hoja, incluida toda la configuración. Para no repetir la conexión en cada equipo use el enlace o código de conexión de más abajo. Los pasos de instalación están en Code.gs. Los secretos de Satrack se guardan en las propiedades del script, nunca en este archivo.</p>
     <div class="grid">
       <div><label>URL de la aplicación web (Apps Script)</label><input id="cl-url" placeholder="https://script.google.com/macros/s/.../exec"></div>
       <div><label>Token de acceso (APP_TOKEN)</label><input id="cl-tok" type="password"></div>
@@ -518,6 +518,10 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <div><label>Retención en la fuente por defecto (%) — compra de combustible</label><input type="number" id="c-rfp" min="0" step="0.05"></div>
     </div>
     <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="cl-dx" type="button">🩺 Diagnosticar conexión</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button><button class="btn sec" id="pdf-todo" type="button">⬇ Exportar TODO a PDF</button></div>
+    <h3 style="margin-top:16px">Conectar otro dispositivo sin volver a escribir nada</h3>
+    <p class="muted small" style="margin-top:0">En este equipo (ya conectado) pulse «Copiar enlace / código». En el otro dispositivo abra el enlace, o pegue el código abajo y pulse «Aplicar». Quien tenga el enlace o código puede leer y modificar sus datos: compártalo solo con personas autorizadas y por un canal privado.</p>
+    <div class="row"><button class="btn sec" id="cl-link" type="button">📋 Copiar enlace / código de conexión</button></div>
+    <div class="grid" style="margin-top:8px"><div><label>Pegar enlace o código de conexión</label><input id="cl-code" placeholder="https://…#cfg=… o código" autocomplete="off" spellcheck="false"></div><div class="row" style="align-self:end"><button class="btn sec" id="cl-apply" type="button">Aplicar y sincronizar</button></div></div>
     <div id="dx-out" style="display:none;margin-top:14px"></div>
   </div>
 
@@ -1716,7 +1720,19 @@ function leerTabla(file){return new Promise((res,rej)=>{const ext=file.name.spli
  else{rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array',cellDates:true});res(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}))}catch(e){rej(e)}};rd.readAsArrayBuffer(file)}})}
 
 /* ---------- Google Sheets (Apps Script) ---------- */
-const CK='igc_cloud';let CL={};try{CL=JSON.parse(localStorage.getItem(CK)||'{}')}catch(e){}
+const CK='igc_cloud',DK='igc_dirty';
+/* CONEXIÓN INCRUSTADA (opcional): si este archivo es PRIVADO, escriba aquí una sola vez la URL de Apps Script y el APP_TOKEN y todo dispositivo que abra el archivo se conectará solo. NO lo haga si el archivo está en un sitio público. */
+const CONEXION_FIJA={url:'',token:''};
+let CL={};try{CL=JSON.parse(localStorage.getItem(CK)||'{}')}catch(e){}
+let cnxOrigen='';
+const cnxValida=c=>!!(c&&/^https:\/\/script\.google\.com\/.+\/exec$/.test(String(c.url||'').trim())&&String(c.token||'').trim());
+const cnxCodigo=c=>btoa(unescape(encodeURIComponent(JSON.stringify({u:c.url,t:c.token})))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+function cnxLeer(txt){try{txt=String(txt||'').trim();const m=/cfg=([A-Za-z0-9_\-]+)/.exec(txt),b=(m?m[1]:txt).replace(/-/g,'+').replace(/_/g,'/'),j=JSON.parse(decodeURIComponent(escape(atob(b))));const c={url:String(j.u||'').trim(),token:String(j.t||'').trim()};return cnxValida(c)?c:null}catch(e){return null}}
+(function(){
+ try{const m=/[#&]cfg=/.exec(location.hash||'');
+  if(m){const c=cnxLeer(location.hash);if(c){CL=c;localStorage.setItem(CK,JSON.stringify(CL));cnxOrigen='enlace'}try{history.replaceState(null,'',location.href.split('#')[0])}catch(e){}}}catch(e){}
+ try{if(!cnxValida(CL)&&cnxValida(CONEXION_FIJA)){CL={url:CONEXION_FIJA.url.trim(),token:CONEXION_FIJA.token.trim()};try{localStorage.setItem(CK,JSON.stringify(CL))}catch(e){}cnxOrigen='archivo'}}catch(e){}
+})();
 const COLS=['vehiculos','conductores','rutas','tanqueos','viajes','satrack','satLotes','facturas','preop'];
 let pulled=false,pushT=null;
 class CloudErr extends Error{constructor(m,code,extra){super(m);this.code=code;this.extra=extra||{}}}
@@ -1726,13 +1742,26 @@ async function cloud(action,payload,cfg,ms){cfg=cfg||CL;const ctl=new AbortContr
  clearTimeout(tm);let j;try{j=JSON.parse(tx)}catch(e){const t=(tx.match(/<title>([^<]*)<\/title>/i)||[])[1]||'';throw new CloudErr('Google devolvió una página HTML en lugar de datos'+(t?' («'+t.trim()+'»)':'')+(r.status&&r.status!==200?' [HTTP '+r.status+']':''),'HTML',{html:tx.slice(0,400),title:t})}
  if(!j.ok)throw new CloudErr(j.error||'Error','APP',{resp:j});return j}
 function setSync(t,c){const e=$('#sync');if(e){e.textContent=t;e.style.color=c||'#d6e4f5'}}
-function schedPush(){if(!CL.url||!pulled)return;clearTimeout(pushT);setSync('● Guardando en Google Sheets…','#f0b43c');pushT=setTimeout(push,1500)}
-async function push(){try{const d={config:[S.config]};COLS.forEach(k=>d[k]=S[k]);await cloud('saveAll',{data:d});setSync('● Sincronizado con Google Sheets','#4cc27e')}catch(e){setSync('● Error al guardar en Sheets: '+e.message+' — clic aquí para diagnosticar','#ff7b80')}}
-async function pull(){if(!CL.url)return setSync('● Sin conexión a Google Sheets (solo este navegador)','#f0b43c');
- try{setSync('● Descargando de Google Sheets…','#f0b43c');const d=(await cloud('loadAll')).data||{},has=COLS.some(k=>(d[k]||[]).length);
-  if(has){const o={config:(d.config&&d.config[0])||{}};COLS.forEach(k=>o[k]=d[k]||[]);S=normState(o);try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}renderAll()}
-  pulled=true;setSync('● Sincronizado con Google Sheets','#4cc27e');if(!has&&COLS.some(k=>S[k].length))push()}
- catch(e){setSync('● Sin conexión con Sheets: '+e.message+' — clic aquí para diagnosticar','#ff7b80')}}
+function schedPush(){if(!CL.url)return;try{localStorage.setItem(DK,String(Date.now()))}catch(e){}if(!pulled)return;clearTimeout(pushT);setSync('● Guardando en Google Sheets…','#f0b43c');pushT=setTimeout(push,1500)}
+async function push(){pushT=null;const marca=localStorage.getItem(DK);try{const d={config:[S.config]};COLS.forEach(k=>d[k]=S[k]);await cloud('saveAll',{data:d});if(localStorage.getItem(DK)===marca)localStorage.removeItem(DK);setSync('● Sincronizado con Google Sheets','#4cc27e')}catch(e){setSync('● Error al guardar en Sheets: '+e.message+' — clic aquí para diagnosticar','#ff7b80')}}
+let lastPull=0;
+async function pull(opt){opt=opt||{};
+ if(!CL.url)return setSync('● Sin conexión a Google Sheets (solo este navegador) — configúrela en Configuración','#f0b43c');
+ try{
+  if(!opt.silent)setSync('● Descargando de Google Sheets…','#f0b43c');
+  const d=(await cloud('loadAll')).data||{},hasCfg=!!(d.config&&d.config[0]&&Object.keys(d.config[0]).length),has=hasCfg||COLS.some(k=>(d[k]||[]).length);
+  if(!opt.force&&localStorage.getItem(DK)&&!opt.silent){
+   if(confirm('Este dispositivo tiene cambios que no alcanzaron a sincronizarse con Google Sheets (por ejemplo, hechos sin internet).\n\nAceptar: subir esos cambios a Google Sheets.\nCancelar: descartarlos y descargar lo que hay en Google Sheets.')){pulled=true;await push();lastPull=Date.now();return}
+   localStorage.removeItem(DK)}
+  if(opt.force)localStorage.removeItem(DK);
+  if(has){const o={config:(d.config&&d.config[0])||{}};COLS.forEach(k=>o[k]=d[k]||[]);const nS=normState(o);
+   if(JSON.stringify(nS)!==JSON.stringify(S)){S=nS;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}renderAll();renderCloudCfg()}}
+  pulled=true;lastPull=Date.now();setSync('● Sincronizado con Google Sheets','#4cc27e');
+  if(!has&&COLS.some(k=>S[k].length))push()}
+ catch(e){setSync(opt.silent?'● Sin conexión con Sheets (se reintentará) — clic aquí para diagnosticar':'● Sin conexión con Sheets: '+e.message+' — clic aquí para diagnosticar',opt.silent?'#f0b43c':'#ff7b80')}}
+/* Refresco automático: al volver a la pestaña/app y cada 2 minutos, si no hay cambios locales pendientes ni un formulario en edición */
+function autoRefresh(){if(!CL.url||!pulled||document.hidden||pushT||localStorage.getItem(DK)||Date.now()-lastPull<30000)return;const a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.closest('form'))return;pull({silent:true})}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)autoRefresh()});window.addEventListener('online',()=>{if(CL.url&&pulled&&localStorage.getItem(DK))schedPush();else autoRefresh()});setInterval(autoRefresh,120000);
 /* ---------- Diagnóstico de conexión con Apps Script y Google Sheets ---------- */
 const DX_RE=/^https:\/\/script\.google\.com\/(?:macros\/|a\/macros\/[^\/]+\/|a\/[^\/]+\/macros\/)s\/[A-Za-z0-9_-]{20,}\/exec$/;
 const dxEsc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -2277,7 +2306,7 @@ function exportXLSX(sec){
 
 function renderCloudCfg(){$('#cl-url').value=CL.url||'';$('#cl-tok').value=CL.token||'';$('#c-tpre').value=S.config.tolPreop;$('#c-tfp').value=S.config.tolFacPct;$('#c-tfd').value=S.config.tolFacDias;$('#c-tfv').value=S.config.tolFacValor;$('#c-rfp').value=S.config.rfPct}
 function initExtra(){
- const unlock=()=>{document.body.classList.remove('locked');pull()};
+ const unlock=()=>{document.body.classList.remove('locked');if(cnxOrigen){toast('Conexión con Google Sheets configurada automáticamente ('+(cnxOrigen==='enlace'?'enlace de conexión':'archivo')+')');cnxOrigen=''}pull()};
  if(sessionStorage.getItem('igc_ok')==='1')unlock();
  $('#f-login').onsubmit=e=>{e.preventDefault();const u=$('#lg-u').value.trim(),p=$('#lg-p').value;
   if(u===U_OK&&sha256(u+':'+p)===H_OK){sessionStorage.setItem('igc_ok','1');$('#lg-err').textContent='';unlock()}else{$('#lg-err').textContent='Usuario o contraseña incorrectos';$('#lg-p').value=''}};
@@ -2297,9 +2326,13 @@ function initExtra(){
  [['#c-tpre','tolPreop'],['#c-tfp','tolFacPct'],['#c-tfd','tolFacDias'],['#c-tfv','tolFacValor'],['#c-rfp','rfPct']].forEach(([s,k])=>$(s).onchange=()=>{const v=num($(s).value);if(v==null||v<0)return renderCloudCfg();S.config[k]=v;save();renderAll()});
  $('#cl-ok').onclick=()=>{CL={url:$('#cl-url').value.trim(),token:$('#cl-tok').value.trim()};localStorage.setItem(CK,JSON.stringify(CL));pulled=false;pull().then(()=>{if(!pulled&&CL.url)diagnosticar()})};
  $('#cl-up').onclick=async()=>{if(!CL.url)return toast('Configure primero la URL');if(!confirm('Esto reemplaza el contenido de Google Sheets con los datos de este navegador. ¿Continuar?'))return;pulled=true;await push();toast('Datos subidos a Google Sheets')};
- $('#cl-down').onclick=()=>{if(!CL.url)return toast('Configure primero la URL');if(confirm('Esto reemplaza los datos de este navegador con los de Google Sheets. ¿Continuar?')){pulled=false;pull()}};
+ $('#cl-down').onclick=()=>{if(!CL.url)return toast('Configure primero la URL');if(confirm('Esto reemplaza los datos de este navegador con los de Google Sheets. ¿Continuar?')){pulled=false;pull({force:true})}};
  $('#sat-api').onclick=satApiSync;$('#sat-test').onclick=satProbar;satCfgWire();
  $('#cl-dx').onclick=diagnosticar;
+ $('#cl-link').onclick=async()=>{if(!cnxValida(CL))return toast('Primero guarde una URL y un token válidos');
+  const cod=cnxCodigo(CL),web=/^https?:$/.test(location.protocol),txt=web?location.href.split('#')[0]+'#cfg='+cod:cod;
+  try{await navigator.clipboard.writeText(txt);toast(web?'Enlace de conexión copiado':'Código de conexión copiado (este archivo no está publicado en la web: en el otro dispositivo abra el aplicativo y péguelo en «Aplicar»)')}catch(e){prompt('Copie este '+(web?'enlace':'código')+':',txt)}};
+ $('#cl-apply').onclick=()=>{const c=cnxLeer($('#cl-code').value);if(!c)return toast('Enlace o código no válido');CL=c;localStorage.setItem(CK,JSON.stringify(CL));$('#cl-code').value='';renderCloudCfg();pulled=false;pull().then(()=>{if(!pulled)diagnosticar()})};
  {const sy=$('#sync');sy.title='Clic para diagnosticar la conexión con Google Sheets';sy.onclick=()=>{goTab('config');diagnosticar()}}
  renderCloudCfg()}
 
