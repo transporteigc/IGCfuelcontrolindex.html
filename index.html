@@ -365,7 +365,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
   </div>
   <div class="card" id="sat-pdf-card">
     <h2>Estadísticas de Satrack por intervalo entre tanqueos (PDF)</h2>
-    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack, <b>uno por día</b> (informe diario) o para el intervalo entre dos tanqueos. Al adjuntarlos, el sistema lee <b>solo</b> el vehículo, el día y las <b>horas de ralentí</b> y los guarda de inmediato en el día correspondiente (si el PDF trae una tabla con varios días, cada fila va a su día). Únicamente cuando no logra identificar con seguridad el vehículo, el día o el ralentí, deja el PDF más abajo para que usted lo confirme. Del PDF <b>solo se toma el ralentí</b>: los km recorridos salen del informe Excel (o de la API) y no se modifican. El PDF queda adjunto en «Informes cargados».</p>
+    <p class="muted small" style="margin-top:0">Adjunte los PDF de estadísticas que entrega Satrack, <b>uno por día</b> (informe diario) o para el intervalo entre dos tanqueos. Al cargarlo, el sistema lee solo el vehículo, el día y el <b>ralentí</b> y lo guarda en el día correspondiente (si el PDF trae una tabla con varios días, guarda cada día). El sistema intenta leer del PDF el vehículo, las fechas y las <b>horas de ralentí</b>; usted confirma o corrige antes de guardar. Del PDF <b>solo se toma el ralentí</b>: los km recorridos salen del informe Excel (o de la API) y no se modifican. El PDF queda adjunto en «Informes cargados».</p>
     <div class="row"><button class="btn" type="button" id="sp-btn">Adjuntar PDF(s) de estadísticas</button><input type="file" id="sp-file" accept=".pdf,application/pdf" multiple hidden></div>
     <div id="sp-out" style="margin-top:12px"></div>
   </div>
@@ -657,7 +657,7 @@ function analizarPlaca(placa){
     const d=p.kmSat==null?null:dpair(p.kmOdo,p.kmSat);
     p.difAbs=d?d.abs:null;p.difSign=d?d.sign:null;p.difPct=d&&p.kmOdo>0?d.pct:null;
     p.gal=seg.reduce((s,r)=>s+(r.gal||0),0);
-    const srRal=sr0.filter(x=>x.soloRal),cubre=x=>srRal.some(q=>q.t0<=satMid(x)&&satMid(x)<=q.t1),srR=[...srRal,...sr.filter(x=>!cubre(x))].filter(x=>isNum(x.ralentiH)),conR=seg.filter(r=>isNum(r.ralentiH));
+    const srRal0=sr0.filter(x=>x.soloRal),dias0=srRal0.filter(x=>x.t1-x.t0<DIA),srRal=srRal0.filter(x=>x.t1-x.t0<DIA||!dias0.some(d=>d.t0>=x.t0&&d.t1<=x.t1)),cubre=x=>srRal.some(q=>q.t0<=satMid(x)&&satMid(x)<=q.t1),srR=[...srRal,...sr.filter(x=>!cubre(x))].filter(x=>isNum(x.ralentiH)),conR=seg.filter(r=>isNum(r.ralentiH));
     p.ralentiH=srR.length?srR.reduce((s,x)=>s+x.ralentiH,0):(conR.length?conR.reduce((s,r)=>s+Number(r.ralentiH),0):null);
     p.viajes=S.viajes.filter(v=>v.placa===placa&&dtV(v)>t0&&dtV(v)<=t1).sort((a,b)=>dtV(a)-dtV(b));
     p.nViajes=p.viajes.reduce((s,v)=>s+nV(v),0);
@@ -1471,7 +1471,7 @@ function nivelComb(pl){
   const Lr=rd.length?rd[rd.length-1]:{t:a.t,odo:a.odo,tipo:a.tipo},kmOdo=Lr.odo-a.odo;
   const dS=(t,tipo)=>diaIni(t)+(tipo==='pre'?0:DIA);/* lectura de la mañana: ese mismo día aún falta; lectura de tanqueo: desde el día siguiente */
   const sat=S.satrack.filter(x=>x.placa===pl&&!x.soloRal&&x.t1-x.t0<DIA&&isNum(x.km)&&x.t0>=dS(Lr.t,Lr.tipo)),kmSat=sat.reduce((x,r)=>x+r.km,0);
-  const s0=dS(a.t,a.tipo),srAll=S.satrack.filter(x=>x.placa===pl&&satMid(x)>=s0),soloR=srAll.filter(x=>x.soloRal),cubre=x=>soloR.some(q=>q.t0<=satMid(x)&&satMid(x)<=q.t1),
+  const s0=dS(a.t,a.tipo),srAll=S.satrack.filter(x=>x.placa===pl&&satMid(x)>=s0),soloR0=srAll.filter(x=>x.soloRal),dR=soloR0.filter(x=>x.t1-x.t0<DIA),soloR=soloR0.filter(x=>x.t1-x.t0<DIA||!dR.some(d=>d.t0>=x.t0&&d.t1<=x.t1)),cubre=x=>soloR.some(q=>q.t0<=satMid(x)&&satMid(x)<=q.t1),
     ralH=[...soloR,...srAll.filter(x=>!x.soloRal&&!cubre(x))].filter(x=>isNum(x.ralentiH)).reduce((x,r)=>x+r.ralentiH,0),ralG=veh.ralenti!=null?ralH*veh.ralenti:0;
   const kmTot=kmOdo+kmSat,cons=kmTot*std+ralG,nivel=Math.max(0,Math.min(cap>0?+cap:Infinity,a.nivel+added-cons));
   const hasta=Math.max(Lr.t,...sat.map(x=>x.t0)),min=nivMin();
@@ -2550,104 +2550,118 @@ function spHoras(s,linea){
   const n=parseKm(s);if(n==null)return null;
   return(/min/.test(linea)&&!/hora|\bhh\b/.test(linea))?n/60:n;
 }
+const MESES={ene:1,jan:1,feb:2,mar:3,abr:4,apr:4,may:5,jun:6,jul:7,ago:8,aug:8,sep:9,set:9,oct:10,nov:11,dic:12,dec:12};
+const spFechas=t=>{const out=[],MS='ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic|jan|apr|aug|dec',
+  re=new RegExp('(\\d{1,2})[\\/\\-.](\\d{1,2})[\\/\\-.](\\d{4})(?:[ t,]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?|(\\d{4})-(\\d{2})-(\\d{2})(?:[ t]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?|(\\d{1,2})\\s*(?:de\\s+)?('+MS+')[a-z]*\\.?,?\\s*(?:de\\s+)?(\\d{4})','g'),
+  re2=new RegExp('\\b('+MS+')[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})','g');let m;
+  const add=(y,mo,d,h,mi,se,ht)=>{if(mo>=1&&mo<=12&&d>=1&&d<=31&&y>2000)out.push({ts:new Date(y,mo-1,d,h,mi,se).getTime(),day:new Date(y,mo-1,d).getTime(),ht})};
+  while((m=re.exec(t))){
+    if(m[3])add(+m[3],+m[2],+m[1],+(m[4]||0),+(m[5]||0),+(m[6]||0),m[4]!=null);
+    else if(m[7])add(+m[7],+m[8],+m[9],+(m[10]||0),+(m[11]||0),+(m[12]||0),m[10]!=null);
+    else add(+m[15],MESES[m[14]],+m[13],0,0,0,false)}
+  while((m=re2.exec(t)))add(+m[3],MESES[m[1]],+m[2],0,0,0,false);
+  return out};
 function spLeer(L){
   const T=L.map(r=>Array.isArray(r)?r.join(' '):String(r)),N=T.map(norm),all=N.join('\n'),res={km:null,ral:null,t0:null,t1:null};
   const pk=[/(?:km|kilometros)\s+recorridos?[^0-9\n]{0,30}(\d[\d.,]*)/,/distancia\s+(?:total\s+)?(?:recorrida)?[^0-9\n]{0,30}(\d[\d.,]*)/,/(?:total\s+)?recorrido(?:\s+total)?[^0-9\n]{0,30}(\d[\d.,]*)/,/kilometraje[^0-9\n]{0,30}(\d[\d.,]*)/,/(?:distancia|recorrido)[^0-9\n]{0,40}(\d[\d.,]*)/];
   for(const re of pk){for(const l of N){const m=l.match(re);if(m){const v=parseKm(m[1]);if(v!=null&&v>=0){res.km=v;break}}}if(res.km!=null)break}
-  for(const l of N){const m=l.match(/ralenti[^0-9\n]{0,30}(\d{1,4}:\d{2}(?::\d{2})?|\d+\s*h\w*(?:\s*\d+\s*m\w*)?|\d[\d.,]*)/);if(m){const v=spHoras(m[1],l);if(v!=null){res.ral=v;break}}}
-  const allD=N.filter(l=>!/generad|impres|emisi|exportad/.test(l)).join('\n'),ds=[],re=/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})|(\d{4})-(\d{2})-(\d{2})/g;let m;
-  while((m=re.exec(allD))){const y=m[3]?+m[3]:+m[4],mo=m[3]?+m[2]:+m[5],d=m[3]?+m[1]:+m[6];if(mo>=1&&mo<=12&&d>=1&&d<=31&&y>2000)ds.push(new Date(y,mo-1,d).getTime())}
-  if(ds.length){res.t0=Math.min(...ds);res.t1=Math.max(...ds)+DIA-60000}
+  /* Tablero de Satrack: «Movimiento (h) Ralentí (h) Apagado (h)» y, en una línea siguiente, los tres valores (p. ej. «3,2 5,4 14,8») */
+  for(let i=0;i<N.length&&res.ral==null;i++){if(!(/ralenti/.test(N[i])&&/\(\s*h\s*\)/.test(N[i])))continue;
+    const labs=[...N[i].matchAll(/([a-z][a-z ]*?)\s*\(\s*h\s*\)/g)].map(x=>x[1].trim());const ri=labs.findIndex(x=>x.includes('ralenti'));if(ri<0||labs.length<2)continue;
+    for(let k=i+1;k<=i+6&&k<N.length;k++){const mt=N[k].trim().match(/^\d+(?:[.,]\d+)?(?:\s+\d+(?:[.,]\d+)?)*$/);if(!mt)continue;const v=N[k].trim().split(/\s+/);
+      if(v.length===labs.length){res.ral=parseKm(v[ri]);res.horas=v.reduce((a,x)=>a+(parseKm(x)||0),0);break}}}
+  if(res.ral==null)for(const l of N){const m=l.match(/ralenti[^0-9\n]{0,30}(\d{1,4}:\d{2}(?::\d{2})?|\d+\s*h\w*(?:\s*\d+\s*m\w*)?|\d[\d.,]*)/);if(m){const v=spHoras(m[1],l);if(v!=null){res.ral=v;break}}}
+  /* Fechas del informe (se descartan las de generación/impresión del reporte) */
+  const FL=[];N.forEach(l=>{if(!/generad|impres|emitid|creado|descarg|emision/.test(l))FL.push(...spFechas(l))});
+  const F=FL.length?FL:spFechas(all);
+  if(F.length){const mn=Math.min(...F.map(f=>f.ts)),mx=F.reduce((a,f)=>f.ts>a.ts?f:a,F[0]);
+    res.t0=diaIni(mn);res.t1=(mx.ht&&mx.ts===mx.day&&mx.ts>mn)?mx.ts-60000:mx.day+DIA-60000}/* «hasta 00:00» del día siguiente = fin del día anterior */
+  /* Tabla con una fila por día: columna «Ralentí» + una fecha por fila → ralentí de cada día */
+  const RC=L.map(r=>Array.isArray(r)?r.map(String):[String(r)]);let hi=-1,ci=-1;
+  RC.forEach((r,i)=>{if(hi<0&&r.length>=2){const k=r.findIndex(c=>/ralenti/.test(norm(c)));if(k>=0){hi=i;ci=k}}});
+  if(hi>=0){const D=new Map();
+    for(let i=hi+1;i<RC.length;i++){const r=RC[i];if(r.length<=ci)continue;let dt=null;for(const c of r){const f=spFechas(norm(c));if(f.length){dt=f[0].day;break}}
+      if(dt==null)continue;const v=spHoras(norm(r[ci]),norm(RC[hi][ci]));if(v!=null&&v>=0)D.set(dt,v)}
+    if(D.size)res.dias=[...D.entries()].sort((a,b)=>a[0]-b[0]).map(([t,ral])=>({t,ral}))}
   return res}
-let SPLOG=[];
-const spFechaRe=/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})|(\d{4})-(\d{2})-(\d{2})/;
-function spFechaIso(t){const m=String(t).match(spFechaRe);if(!m)return null;const y=m[3]?+m[3]:+m[4],mo=m[3]?+m[2]:+m[5],d=m[3]?+m[1]:+m[6];return(mo>=1&&mo<=12&&d>=1&&d<=31&&y>2000)?y+'-'+pad(mo)+'-'+pad(d):null}
-/* Tabla por día dentro del PDF: encabezado con «Ralentí» + filas con fecha. Devuelve una fila por día (y vehículo). */
-function spFilasDia(L,pls,placaDoc){
-  let hdr=null,ci=-1;const filas=[];let incompleto=false;
-  L.forEach(r=>{const c=(Array.isArray(r)?r:[String(r)]).map(x=>String(x)),nc=c.map(norm),ri=nc.findIndex(x=>/ralent|idle/.test(x));
-    if(ri>=0&&c.length>=3&&!nc.some(x=>/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}|\d+:\d{2}/.test(x))){hdr=nc;ci=ri;return}
-    if(!hdr)return;
-    const dia=c.map(spFechaIso).find(Boolean);if(!dia)return;
-    const tx=normPlaca(c.join(' ')),placa=pls.find(p=>tx.includes(p))||placaDoc||'';
-    const v=c.length===hdr.length?spHoras(norm(c[ci]),hdr[ci]):null;
-    if(v==null||v<0){incompleto=true;return}
-    filas.push({dia,placa,ral:v})});
-  return{filas,incompleto}}
-/* Guarda el ralentí de cada día directamente (reemplaza el ralentí PDF previo del mismo vehículo y día). No toca los km. */
-async function spAuto(file,regs){
-  const lote=uid();
-  S.satLotes.push({id:lote,archivo:file.name,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:[...new Set(regs.map(g=>g.placa))].join(', ')+' · '+(regs.length>1?regs.length+' días':fd(regs[0].dia)+' (día)')+' · solo ralentí (diario, automático)'});
-  regs.forEach(g=>{const t0=new Date(g.dia+'T00:00:00').getTime(),t1=t0+DIA-60000,dentro=x=>x.placa===g.placa&&satMid(x)>t0&&satMid(x)<=t1,sinKm=!S.satrack.some(x=>dentro(x)&&!x.soloRal);
-    S.satrack=S.satrack.filter(x=>!(dentro(x)&&x.soloRal));
-    S.satrack.push({id:uid(),placa:g.placa,t0,t1,km:0,ralentiH:g.ral,lote,soloRal:true});
-    SPLOG.unshift({nombre:file.name,placa:g.placa,dia:g.dia,ral:g.ral,sinKm})});
-  try{await fPut('satpdf:'+lote,file)}catch(e){}
-  subirArchivoSat(lote,file)}
+let SPAUTO=[];
 async function satPdfAbrir(files){
-  const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))];
-  toast('Leyendo PDF…');let nDia=0,nArch=0,nRev=0;
+  const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))],auto=[];
+  toast('Leyendo PDF…');
   for(const file of files){
     if(!/\.pdf$/i.test(file.name))continue;
     let L=[],aviso='';
     try{if(typeof pdfjsLib==='undefined')throw new Error('sin pdf.js');L=await pdfRows(file)}catch(e){aviso='No se pudo leer el texto del PDF (escaneo o sin conexión a la librería): digite los datos.'}
-    const txt=L.map(x=>x.join(' ')).join('\n'),r={id:uid(),file,nombre:file.name,placa:'',key:'',km:null,ral:null,mt0:'',mt1:'',dia:'',aviso,txt:txt.slice(0,4000)};
-    let auto=null;
-    if(L.length){const x=spLeer(L);r.km=x.km;r.ral=x.ral;const tx=normPlaca(txt);r.placa=pls.find(p=>tx.includes(p))||'';
-      /* 1) tabla con una fila por día */
-      const F=spFilasDia(L,pls,r.placa);
-      if(F.filas.length&&!F.incompleto){const G={};F.filas.forEach(f=>{const k=f.placa+'|'+f.dia;G[k]=G[k]||{placa:f.placa,dia:f.dia,ral:0};G[k].ral+=f.ral});
-        const regs=Object.values(G);if(regs.every(g=>g.placa&&g.ral<=24))auto=regs}
-      /* 2) informe de un solo día */
-      if(!auto&&x.t0!=null&&x.t1-x.t0<DIA&&r.placa&&x.ral!=null&&x.ral>=0&&x.ral<=24)auto=[{placa:r.placa,dia:dIso(x.t0),ral:x.ral}];
-      if(!auto){if(r.placa&&x.t0!=null){let best=null,sc=Infinity;spIntervalos(r.placa).forEach(iv=>{const s=Math.abs(iv.t0-x.t0)+Math.abs(iv.t1-x.t1);if(s<sc){sc=s;best=iv}});if(best&&sc<=3*DIA)r.key=best.key}
-        if(x.t0!=null&&x.t1-x.t0<DIA){r.key='__d';r.dia=dIso(x.t0)}}}
-    if(auto){await spAuto(file,auto);nDia+=auto.length;nArch++}
-    else{SP.push(r);nRev++}}
-  if(nArch){S.satLotes=S.satLotes.filter(x=>!x.pdf||S.satrack.some(y=>y.lote===x.id));save();renderAll()}
-  spRender();
-  toast(nArch?nArch+' PDF(s) cargado(s): ralentí de '+nDia+' día(s) ubicado(s) automáticamente'+(nRev?' · '+nRev+' requiere(n) su confirmación':''):(nRev?nRev+' PDF(s) requiere(n) su confirmación (no se identificó con seguridad vehículo, día o ralentí)':'Sin archivos PDF'))}
-function spLogHtml(){
-  if(!SPLOG.length)return'';
-  const rows=SPLOG.slice(0,60).map(x=>`<tr><td>${esc(x.nombre)}</td><td><b>${esc(x.placa)}</b></td><td>${fd(x.dia)}</td><td class="n">${fmt(x.ral,2)} h</td><td>${x.sinKm?'<span class="small bad">Falta el Excel/API de ese día (km)</span>':'<span class="small good">Km Satrack del día disponibles</span>'}</td></tr>`).join('');
-  return `<h3>Ralentí cargado automáticamente</h3><div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Día</th><th class="n">Ralentí</th><th>Km Satrack del día</th></tr>${rows}</table></div><p class="muted small">Cada PDF se asignó solo al vehículo y al día que trae. Si vuelve a cargar el PDF de un día ya cargado, su ralentí se reemplaza (no se duplica). Para corregir un día, cargue de nuevo el PDF o elimínelo en «Informes cargados».</p>`}
+    const txt=L.map(x=>x.join(' ')).join('\n'),r={id:uid(),file,nombre:file.name,placa:'',key:'',km:null,ral:null,mt0:'',mt1:'',dia:'',dias:null,aviso,txt:txt.slice(0,4000)};
+    if(L.length){const x=spLeer(L);r.km=x.km;r.ral=x.ral;r.dias=x.dias||null;const tx=normPlaca(txt);r.placa=pls.find(p=>tx.includes(p))||'';
+      if(r.placa&&x.t0!=null){let best=null,sc=Infinity;spIntervalos(r.placa).forEach(iv=>{const s=Math.abs(iv.t0-x.t0)+Math.abs(iv.t1-x.t1);if(s<sc){sc=s;best=iv}});if(best&&sc<=3*DIA)r.key=best.key}
+      const fn=spFechas(norm(file.name.replace(/[_]+/g,' '))),diaTxt=(x.t0!=null&&x.t1-x.t0<DIA)?x.t0:null;
+      if(fn.length)r.fileDia=dIso(fn[0].day);
+      /* día del informe: el del texto si es de un solo día; si no, el del nombre del archivo (p. ej. «Operations_Statistics 3 OCT 2026») cuando las horas suman ~24 o el texto no trae fechas */
+      const hrs24=x.horas==null||Math.abs(x.horas-24)<=1.5,diaNom=(fn.length&&hrs24&&(x.t0==null||x.t1-x.t0>=DIA))?fn[0].day:null,dd=diaTxt!=null?diaTxt:diaNom;
+      if(dd!=null){r.key='__d';r.dia=dIso(dd)}}/* informe de un solo día → diario */
+    /* Si se leyó vehículo + día + ralentí, se guarda solo en el día correspondiente */
+    const segs=r.dias&&r.dias.length?r.dias.map(d=>({t0:d.t,t1:d.t+DIA-60000,ral:d.ral})):(r.key==='__d'&&r.dia&&r.ral!=null?[{t0:new Date(r.dia+'T00:00:00').getTime(),t1:new Date(r.dia+'T00:00:00').getTime()+DIA-60000,ral:r.ral}]:null);
+    if(r.placa&&!r.aviso&&segs&&segs.every(g=>g.ral!=null&&g.ral>=0))auto.push({file,nombre:file.name,placa:r.placa,segs,diario:true,txt:segs.length>1?fd(dIso(segs[0].t0))+' – '+fd(dIso(segs[segs.length-1].t0))+' ('+segs.length+' días)':fd(dIso(segs[0].t0))+' (día)'});
+    else SP.push(r)}
+  if(auto.length){const rs=await spPersistir(auto);
+    auto.forEach(it=>SPAUTO.unshift({lote:it.lote,placa:it.placa,nombre:it.nombre,segs:it.segs}));
+    toast(auto.length+' PDF cargado(s) automáticamente: ralentí guardado en su día'+(rs.sinKm?' ('+rs.sinKm+' día(s) aún sin km del informe Excel/API)':''))}
+  spRender()}
 function spRender(){
-  const o=$('#sp-out'),lg=spLogHtml();if(!SP.length){o.innerHTML=lg;return}
+  const o=$('#sp-out'),auto=SPAUTO.length?`<h3 style="margin:0 0 6px">Cargados automáticamente</h3><div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Día(s)</th><th class="n">Ralentí (h)</th><th></th></tr>${SPAUTO.slice(0,15).map(a=>`<tr><td>${esc(a.nombre)}</td><td><b>${esc(a.placa)}</b></td><td>${a.segs.map(g=>fd(dIso(g.t0))+': <b>'+fmt(g.ral,2)+' h</b>').join('<br>')}</td><td class="n">${fmt(a.segs.reduce((x,g)=>x+g.ral,0),2)}</td><td><button class="btn sec sm" type="button" data-spu="${a.lote}">Deshacer</button></td></tr>`).join('')}</table></div><p class="muted small">El ralentí se leyó del PDF y quedó en el día que trae el informe. Verifique los valores; «Deshacer» elimina esa carga.</p>`:'';
+  if(!SP.length){o.innerHTML=auto;$$('#sp-out [data-spu]').forEach(b=>b.onclick=()=>spDeshacer(b.dataset.spu));return}
   const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].sort();
-  o.innerHTML=lg+(lg?'<h3>Requieren su confirmación</h3>':'')+'<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Informe de un día o intervalo entre tanqueos</th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
-    return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':r.ral!=null?'good':'muted'}">${r.aviso?esc(r.aviso):(r.ral!=null?'Ralentí leído del PDF: verifíquelo':'No se detectó el ralentí: digítelo')}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
+  o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Informe de un día o intervalo entre tanqueos</th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
+    return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':(r.ral!=null||r.dias)?'good':'muted'}">${r.aviso?esc(r.aviso):(r.dias?'Ralentí leído de '+r.dias.length+' día(s): seleccione el vehículo':(r.ral!=null?'Ralentí leído del PDF: verifíquelo':'No se detectó el ralentí: digítelo'))}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
     <td><select data-sp="placa" data-i="${i}"><option value="">—</option>${pls.map(p=>`<option ${p===r.placa?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
     <td><select data-sp="key" data-i="${i}"><option value="">— Seleccione —</option><option value="__d" ${r.key==='__d'?'selected':''}>Un solo día (informe diario)</option>${iv.map(x=>`<option value="${esc(x.key)}" ${x.key===r.key?'selected':''}>${esc(x.txt)}</option>`).join('')}<option value="__m" ${r.key==='__m'?'selected':''}>Otro intervalo (manual)</option></select>${r.key==='__d'?`<div class="row" style="margin-top:6px"><input type="date" data-sp="dia" data-i="${i}" value="${esc(r.dia)}"></div>`:''}${r.key==='__m'?`<div class="row" style="margin-top:6px"><input type="datetime-local" data-sp="mt0" data-i="${i}" value="${esc(r.mt0)}"><input type="datetime-local" data-sp="mt1" data-i="${i}" value="${esc(r.mt1)}"></div>`:''}</td>
-    <td class="n"><input type="number" min="0" step="0.1" data-sp="ral" data-i="${i}" value="${r.ral==null?'':+r.ral.toFixed(2)}" style="width:90px"></td>
-    <td><button class="btn sec sm" type="button" data-spx="${i}">Quitar</button></td></tr>`}).join('')+'</table></div><div class="row" style="margin-top:10px"><button class="btn" type="button" id="sp-ok">Guardar estadísticas</button><button class="btn sec" type="button" id="sp-cancel">Cancelar</button></div><p class="muted small">Para el informe diario elija «Un solo día» y la fecha (se detecta del PDF cuando trae una sola fecha): el ralentí queda en ese día y se usa en el rendimiento diario. Para un intervalo entre tanqueos necesita al menos dos tanqueos full registrados; también puede usar «Otro intervalo (manual)».</p>';
+    <td class="n">${r.dias?r.dias.map(d=>fd(dIso(d.t))+': '+fmt(d.ral,2)+' h').join('<br>'):`<input type="number" min="0" step="0.1" data-sp="ral" data-i="${i}" value="${r.ral==null?'':+r.ral.toFixed(2)}" style="width:90px">`}</td>
+    <td><button class="btn sec sm" type="button" data-spx="${i}">Quitar</button></td></tr>`}).join('')+'</table></div><div class="row" style="margin-top:10px"><button class="btn" type="button" id="sp-ok">Guardar estadísticas</button><button class="btn sec" type="button" id="sp-cancel">Cancelar</button></div><p class="muted small">Estos PDF no se pudieron ubicar solos (falta el vehículo, la fecha o el ralentí). Elija «Un solo día» y la fecha, o un intervalo entre tanqueos. Cuando el PDF trae el vehículo, el día y el ralentí, se guarda automáticamente en su día.</p>'+auto;
   $$('#sp-out [data-sp]').forEach(e=>e.onchange=()=>{const r=SP[+e.dataset.i],k=e.dataset.sp;
     if(k==='placa'){r.placa=e.value;r.key='';spRender();return}
-    if(k==='key'){r.key=e.value;spRender();return}
+    if(k==='key'){r.key=e.value;if(e.value==='__d'&&!r.dia&&r.fileDia)r.dia=r.fileDia;spRender();return}
     if(k==='ral')r.ral=num(e.value);else r[k]=e.value});
   $$('#sp-out [data-spx]').forEach(b=>b.onclick=()=>{SP.splice(+b.dataset.spx,1);spRender()});
-  $('#sp-cancel').onclick=()=>{SP=[];spRender()};$('#sp-ok').onclick=spGuardar}
+  $('#sp-cancel').onclick=()=>{SP=[];spRender()};$('#sp-ok').onclick=spGuardar;$$('#sp-out [data-spu]').forEach(b=>b.onclick=()=>spDeshacer(b.dataset.spu))}
+async function spPersistir(items){
+  let sinKm=0;
+  for(const it of items){
+    const lote=uid();
+    it.segs.forEach(g=>{
+      const diario=g.t1-g.t0<DIA,dentro=x=>x.placa===it.placa&&satMid(x)>g.t0&&satMid(x)<=g.t1;
+      if(!S.satrack.some(x=>dentro(x)&&!x.soloRal))sinKm++;
+      /* un PDF diario solo reemplaza el ralentí diario de ese mismo día; uno de intervalo, el de su intervalo */
+      S.satrack=S.satrack.filter(x=>!(x.soloRal&&(diario?(x.t1-x.t0<DIA&&dIso(x.t0)===dIso(g.t0)&&x.placa===it.placa):dentro(x))));
+      S.satrack.push({id:uid(),placa:it.placa,t0:g.t0,t1:g.t1,km:0,ralentiH:g.ral,lote,soloRal:true})});
+    S.satLotes.push({id:lote,archivo:it.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:it.placa+' · '+it.txt+' · solo ralentí'+(it.diario?' (diario)':'')});
+    it.lote=lote;
+    try{await fPut('satpdf:'+lote,it.file)}catch(e){}
+    subirArchivoSat(lote,it.file)}
+  S.satLotes=S.satLotes.filter(x=>!x.pdf||S.satrack.some(y=>y.lote===x.id));
+  save();renderAll();
+  return{sinKm}
+}
+function spDeshacer(lote){
+  S.satrack=S.satrack.filter(x=>x.lote!==lote);S.satLotes=S.satLotes.filter(l=>l.id!==lote);SPAUTO=SPAUTO.filter(a=>a.lote!==lote);
+  save();renderAll();spRender();toast('Carga eliminada')
+}
 async function spGuardar(){
-  const listo=[];
+  const items=[];
   for(const r of SP){
-    if(!r.placa||!r.key)return toast('Complete vehículo e intervalo en «'+r.nombre+'»');
+    if(!r.placa)return toast('Seleccione el vehículo de «'+r.nombre+'»');
+    if(r.dias&&r.dias.length){items.push({file:r.file,nombre:r.nombre,placa:r.placa,diario:true,segs:r.dias.map(d=>({t0:d.t,t1:d.t+DIA-60000,ral:d.ral})),txt:fd(dIso(r.dias[0].t))+' – '+fd(dIso(r.dias[r.dias.length-1].t))+' ('+r.dias.length+' días)'});continue}
+    if(!r.key)return toast('Complete el intervalo en «'+r.nombre+'»');
     if(r.ral==null||r.ral<0)return toast('Indique las horas de ralentí de «'+r.nombre+'»');
     let t0,t1,txt;
     if(r.key==='__d'){const d=r.dia?new Date(r.dia+'T00:00:00').getTime():NaN;if(isNaN(d))return toast('Indique la fecha del informe diario de «'+r.nombre+'»');t0=d;t1=d+DIA-60000;txt=fd(r.dia)+' (día)'}
     else if(r.key==='__m'){t0=r.mt0?new Date(r.mt0).getTime():NaN;t1=r.mt1?new Date(r.mt1).getTime():NaN;if(isNaN(t0)||isNaN(t1)||t1<=t0)return toast('Indique un intervalo manual válido en «'+r.nombre+'»');txt=fT(t0)+' → '+fT(t1)}
     else{const iv=spIntervalos(r.placa).find(x=>x.key===r.key);if(!iv)return toast('El intervalo elegido en «'+r.nombre+'» ya no existe');t0=iv.t0;t1=iv.t1;txt=iv.txt}
-    listo.push({r,t0,t1,txt})}
-  let sinKm=0;
-  for(const l of listo){
-    const dentro=x=>x.placa===l.r.placa&&satMid(x)>l.t0&&satMid(x)<=l.t1;
-    if(!S.satrack.some(x=>dentro(x)&&!x.soloRal))sinKm++;
-    S.satrack=S.satrack.filter(x=>!(dentro(x)&&x.soloRal));/* solo se reemplaza un ralentí PDF anterior del mismo intervalo */
-    const lote=uid();
-    S.satLotes.push({id:lote,archivo:l.r.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:l.r.placa+' · '+l.txt+' · solo ralentí'+(l.r.key==='__d'?' (diario)':'')});
-    S.satrack.push({id:uid(),placa:l.r.placa,t0:l.t0,t1:l.t1,km:0,ralentiH:l.r.ral,lote,soloRal:true});
-    try{await fPut('satpdf:'+lote,l.r.file)}catch(e){}
-    subirArchivoSat(lote,l.r.file)}
-  S.satLotes=S.satLotes.filter(x=>!x.pdf||S.satrack.some(y=>y.lote===x.id));
-  SP=[];save();renderAll();spRender();toast(listo.length+' ralentí(es) guardado(s); los km de Satrack no se modificaron'+(sinKm?' ('+sinKm+' día(s)/intervalo(s) aún sin informe Excel/API: cargue el Excel para tener los km)':''))}
+    items.push({file:r.file,nombre:r.nombre,placa:r.placa,diario:r.key==='__d',segs:[{t0,t1,ral:r.ral}],txt})}
+  const rs=await spPersistir(items);
+  items.forEach(it=>SPAUTO.unshift({lote:it.lote,placa:it.placa,nombre:it.nombre,segs:it.segs}));
+  SP=[];spRender();toast(items.length+' ralentí(es) guardado(s); los km de Satrack no se modificaron'+(rs.sinKm?' ('+rs.sinKm+' día(s)/intervalo(s) aún sin informe Excel/API: cargue el Excel para tener los km)':''))
+}
 async function spVer(id){
   let f=null;try{f=await fGet('satpdf:'+id)}catch(e){}
   if(f){const u=URL.createObjectURL(f);window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),60000)}
