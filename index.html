@@ -1721,7 +1721,7 @@ function leerTabla(file){return new Promise((res,rej)=>{const ext=file.name.spli
 /* ---------- Google Sheets (Apps Script) ---------- */
 const CK='igc_cloud',DK='igc_dirty';
 /* CONEXIÓN INCRUSTADA: la completa el botón «Generar copia con conexión incluida» (Configuración). Con ella, cualquier dispositivo que abra este archivo se conecta y sincroniza solo. Este archivo contiene el token: manténgalo privado. */
-const CONEXION_FIJA={url:'',token:''};
+const CONEXION_FIJA={"url":"https://script.google.com/macros/s/AKfycbyQLTOvnjMng82f2LojETgK-QAIVafiZ7zTru9DWW7NVHYM-_8yEiKXK1KMO7JFnqd3/exec","token":"169ae0a8-42ea-46ea-8cc7-bd9e2ca99b46838e3e56-116f-4a9c-acc6-6b4a17385dd1"};
 let CL={};try{CL=JSON.parse(localStorage.getItem(CK)||'{}')}catch(e){}
 let cnxOrigen='';
 const cnxValida=c=>!!(c&&/^https:\/\/script\.google\.com\/.+\/exec$/.test(String(c.url||'').trim())&&String(c.token||'').trim());
