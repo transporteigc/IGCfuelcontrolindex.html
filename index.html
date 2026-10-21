@@ -576,6 +576,12 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const pad=n=>String(n).padStart(2,'0');
 const fd=f=>f?f.split('-').reverse().join('/'):'';
 const fdt=i=>i?fd(i.slice(0,10))+' '+i.slice(11,16):'';
+/* ---------- Hora y día de Colombia (America/Bogota, UTC-5) sin depender de la zona del equipo ---------- */
+const partsCO=ms=>{const o={};new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ms)).forEach(x=>o[x.type]=x.value);return o};
+const ahoraCO=()=>{const x=partsCO(Date.now());return x.year+'-'+x.month+'-'+x.day+' '+x.hour+':'+x.minute};/* «AAAA-MM-DD HH:MM» en hora de Colombia */
+const hoyCO=()=>ahoraCO().slice(0,10);
+/* Registros nuevos: «AAAA-MM-DD HH:MM» ya en Colombia. Los antiguos («…T…») se guardaron en UTC y se convierten al mostrarlos. */
+const fCarga=f=>{if(!f)return '';let t=String(f);if(t.includes('T')){const ms=Date.parse(t.length<=16?t+':00Z':t);if(!isNaN(ms)){const x=partsCO(ms);t=x.year+'-'+x.month+'-'+x.day+' '+x.hour+':'+x.minute}}return fd(t.slice(0,10))+' '+t.slice(11,16)};
 const median=a=>{const s=[...a].sort((x,y)=>x-y),m=Math.floor(s.length/2);return s.length?(s.length%2?s[m]:(s[m-1]+s[m])/2):0};
 const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
 const sdev=a=>{const m=avg(a);return Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/a.length)};
@@ -1153,8 +1159,8 @@ function limpiarFormTanqueo(){
   editing=null;pend=nuevoPend();$('#f-tanqueo').reset();$('#t-full').checked=true;
   $('#p-odo').textContent='';$('#p-comp').textContent='';$('#t-live').innerHTML='';$('#t-total').textContent='';
   $('#t-titulo').textContent='Registrar tanqueo';$('#t-cancelar').hidden=true;$('#t-guardar').textContent='Guardar tanqueo';
-  const n=new Date();
-  $('#t-fecha').value=n.getFullYear()+'-'+pad(n.getMonth()+1)+'-'+pad(n.getDate());$('#t-hora').value=pad(n.getHours())+':'+pad(n.getMinutes());
+  const n=ahoraCO();
+  $('#t-fecha').value=n.slice(0,10);$('#t-hora').value=n.slice(11,16);
 }
 function editarTanqueo(id){
   const r=S.tanqueos.find(x=>x.id===id);if(!r)return;editing=id;pend=nuevoPend();
@@ -1424,7 +1430,7 @@ function satImportar(m,unidad){
     if(!S.vehiculos.find(v=>v.placa===s.placa)&&!S.tanqueos.some(t=>t.placa===s.placa))desc.add(s.placa);
   });
   if(!nu&&!up){toast('No se importó ninguna fila: revise las columnas');return}
-  S.satLotes.push({id:lote,archivo:satPrev.nombre,fecha:new Date().toISOString().slice(0,16)});subirArchivoSat(lote,satPrev.file);
+  S.satLotes.push({id:lote,archivo:satPrev.nombre,fecha:ahoraCO()});subirArchivoSat(lote,satPrev.file);
   satPrev=null;$('#sat-map').innerHTML='';save();renderAll();
   toast(nu+' registros nuevos, '+up+' actualizados'+(om?', '+om+' filas omitidas':'')+(desc.size?'. Placas sin tanqueos aún: '+[...desc].slice(0,5).join(', '):''));
 }
@@ -1432,7 +1438,7 @@ function satImportar(m,unidad){
 function rendDiario(){
   const R=new Map(),get=(d,pl)=>{const k=d+'|'+pl;if(!R.has(k))R.set(k,{fecha:d,placa:pl,km:null,uso:null,vp:null,vm:null,ralH:null,fuenteR:''});return R.get(k)};
   S.satrack.forEach(x=>{if(!(x.t1-x.t0<DIA))return;const o=get(dIso(x.t0),x.placa);
-    if(x.soloRal){o.ralH=x.ralentiH;o.fuenteR='PDF diario'}
+    if(x.soloRal){o.ralH=x.ralentiH;o.fuenteR='PDF diario';o.lote=x.lote}
     else{if(isNum(x.km))o.km=(o.km||0)+x.km;if(isNum(x.horasUso))o.uso=x.horasUso;if(isNum(x.velProm))o.vp=x.velProm;if(isNum(x.velMax))o.vm=x.velMax;
       if(isNum(x.ralentiH)&&o.fuenteR!=='PDF diario'){o.ralH=(o.ralH||0)+x.ralentiH;o.fuenteR='Excel/API'}}});
   return [...R.values()].filter(o=>o.km>0||o.ralH>0).map(o=>{
@@ -1448,10 +1454,11 @@ function renderRendDiario(){
   sp.innerHTML='<option value="">Todos los vehículos</option>'+pls.map(x=>`<option>${esc(x)}</option>`).join('');if(pls.includes(cp))sp.value=cp;
   sm.onchange=sp.onchange=renderRendDiario;
   const V=all.filter(r=>(!sm.value||r.fecha.startsWith(sm.value))&&(!sp.value||r.placa===sp.value)).sort((a,b)=>a.fecha<b.fecha?1:a.fecha>b.fecha?-1:a.placa<b.placa?-1:1);
+  el.onclick=e=>{const a=e.target.closest('[data-rdv]');if(a){e.preventDefault();spVer(a.dataset.rdv)}};
   if(!V.length){el.innerHTML='<tr><td class="muted">Aún no hay registros diarios de Satrack. Cargue el informe Excel diario y, para el ralentí exacto de cada día, adjunte el PDF diario.</td></tr>';return}
   const tk=V.reduce((x,r)=>x+(r.km||0),0),tg=V.reduce((x,r)=>x+(r.tot||0),0),tr=V.reduce((x,r)=>x+(r.ralH||0),0),tgr=V.reduce((x,r)=>x+(r.ralG||0),0);
   el.innerHTML='<tr><th>Fecha</th><th>Vehículo</th><th class="n">Km Satrack</th><th class="n">Horas de uso</th><th class="n">Vel. prom / máx</th><th class="n">Ralentí (h)</th><th class="n">Gal. rodando<div class="small muted">km × estándar</div></th><th class="n">Gal. ralentí</th><th class="n">Gal. totales estimados</th><th class="n">Rendimiento<div class="small muted">km/gal</div></th><th class="n">Gal/100 km</th><th class="n">vs estándar</th></tr>'+
-    V.map(r=>`<tr><td>${fd(r.fecha)}</td><td><b>${esc(r.placa)}</b></td><td class="n">${r.km>0?fmt(r.km,1):'—'}</td><td class="n">${isNum(r.uso)?fmt(r.uso,1)+' h':'—'}</td><td class="n">${isNum(r.vp)||isNum(r.vm)?fmt(r.vp,0)+' / '+fmt(r.vm,0):'—'}</td><td class="n">${r.ralH==null?'—':fmt(r.ralH,1)+' h<div class="small muted">'+r.fuenteR+'</div>'}</td><td class="n">${r.rod==null?'—':fmt(r.rod,1)}</td><td class="n">${r.ralG==null?'—':fmt(r.ralG,1)}</td><td class="n">${r.tot==null?'—':'<b>'+fmt(r.tot,1)+'</b>'}</td><td class="n">${r.rend==null?'—':'<b>'+fmt(r.rend,2)+'</b><div class="small muted">estándar '+fmt(1/r.std,2)+'</div>'}</td><td class="n">${r.g100==null?'—':fmt(r.g100,1)}</td><td class="n">${r.dev==null?'—':chip(nivKm(-r.dev,S.config.tolConsumo)||'ok',sg(r.dev))}</td></tr>`).join('')+
+    V.map(r=>`<tr><td>${fd(r.fecha)}</td><td><b>${esc(r.placa)}</b></td><td class="n">${r.km>0?fmt(r.km,1):'—'}</td><td class="n">${isNum(r.uso)?fmt(r.uso,1)+' h':'—'}</td><td class="n">${isNum(r.vp)||isNum(r.vm)?fmt(r.vp,0)+' / '+fmt(r.vm,0):'—'}</td><td class="n">${r.ralH==null?'—':fmt(r.ralH,1)+' h<div class="small muted">'+r.fuenteR+(r.lote&&r.fuenteR==='PDF diario'?' · <a href="#" data-rdv="'+r.lote+'">Ver PDF</a>':'')+'</div>'}</td><td class="n">${r.rod==null?'—':fmt(r.rod,1)}</td><td class="n">${r.ralG==null?'—':fmt(r.ralG,1)}</td><td class="n">${r.tot==null?'—':'<b>'+fmt(r.tot,1)+'</b>'}</td><td class="n">${r.rend==null?'—':'<b>'+fmt(r.rend,2)+'</b><div class="small muted">estándar '+fmt(1/r.std,2)+'</div>'}</td><td class="n">${r.g100==null?'—':fmt(r.g100,1)}</td><td class="n">${r.dev==null?'—':chip(nivKm(-r.dev,S.config.tolConsumo)||'ok',sg(r.dev))}</td></tr>`).join('')+
     `<tr class="tot"><td colspan="2"><b>TOTAL ${sp.value?esc(sp.value):'FLOTA'}</b></td><td class="n">${fmt(tk,1)}</td><td></td><td></td><td class="n">${fmt(tr,1)} h</td><td class="n">${fmt(V.reduce((x,r)=>x+(r.rod||0),0),1)}</td><td class="n">${fmt(tgr,1)}</td><td class="n"><b>${fmt(tg,1)}</b></td><td class="n"><b>${tg>0?fmt(tk/tg,2):'—'}</b></td><td class="n">${tk>0?fmt(tg/tk*100,1):'—'}</td><td></td></tr>`;
 }
 /* ---------- Nivel estimado de combustible y aviso de tanqueo ---------- */
@@ -1487,7 +1494,7 @@ function correoNivel(n,prueba){
 }
 const errCorreo=e=>/no soportada|unsupported|not supported/i.test(e.message||'')?'El Apps Script aún no tiene el envío de correo (reemplace Code.gs por el nuevo, ejecute autorizarCorreo_ y publique una nueva versión)':(e.message||String(e));
 function chequearCorreoNivel(N){
-  const hoy=dIso(Date.now()),cfg=S.config;cfg.avisoCorreo=cfg.avisoCorreo||{};window._nvTry=window._nvTry||{};window._nvErr=window._nvErr||{};
+  const hoy=hoyCO(),cfg=S.config;cfg.avisoCorreo=cfg.avisoCorreo||{};window._nvTry=window._nvTry||{};window._nvErr=window._nvErr||{};
   N.forEach(n=>{
     if(!n.bajo){if(cfg.avisoCorreo[n.placa]){delete cfg.avisoCorreo[n.placa];save()}delete window._nvErr[n.placa];return}
     if(!(window._nvToast=window._nvToast||{})[n.placa]){window._nvToast[n.placa]=1;toast('⛽ Combustible bajo en '+n.placa+': ~'+fmt(n.nivel,0)+' gal. Debe tanquear hoy.')}
@@ -1498,7 +1505,7 @@ function chequearCorreoNivel(N){
       .catch(e=>{window._nvErr[n.placa]=errCorreo(e);toast('No se pudo enviar el correo: '+window._nvErr[n.placa]);renderNivelComb()});
   });
 }
-const estadoCorreo=n=>{const c=S.config,hoy=dIso(Date.now());if(c.emailAuto===false)return'Correo automático desactivado';if(c.avisoCorreo&&c.avisoCorreo[n.placa]===hoy)return'📧 Correo enviado hoy a '+mailTo();if(!CL.url)return'Sin Apps Script configurado: no se envió correo automático';if((window._nvErr||{})[n.placa])return'⚠ No se pudo enviar el correo: '+window._nvErr[n.placa];return'📧 Enviando correo a '+mailTo()+'…'};
+const estadoCorreo=n=>{const c=S.config,hoy=hoyCO();if(c.emailAuto===false)return'Correo automático desactivado';if(c.avisoCorreo&&c.avisoCorreo[n.placa]===hoy)return'📧 Correo enviado hoy a '+mailTo();if(!CL.url)return'Sin Apps Script configurado: no se envió correo automático';if((window._nvErr||{})[n.placa])return'⚠ No se pudo enviar el correo: '+window._nvErr[n.placa];return'📧 Enviando correo a '+mailTo()+'…'};
 function renderNivelComb(){
   const N=nivelesComb(),bajos=N.filter(n=>n.bajo),av=$('#aviso-comb'),t=$('#tbl-nivel');chequearCorreoNivel(N);
   if(av)av.innerHTML=bajos.map(n=>`<div class="banner ${n.crit?'crit':'warn'}" style="margin:8px 0"><b>⛽ Combustible bajo · ${esc(n.placa)}</b>: ~${fmt(n.nivel,0)} gal en el tanque (mínimo ${fmt(n.min,0)})${n.cond?' · conductor <b>'+esc(n.cond)+'</b>':''} → <b>debe tanquear hoy</b>. <span class="small">Estimado con datos hasta ${fd(dIso(n.hasta))}${n.edad>1?' (hace '+n.edad+' días)':''}. ${esc(estadoCorreo(n))}</span> <a class="btn sec sm" href="mailto:${esc(mailTo())}?subject=${encodeURIComponent(correoNivel(n).subject)}&body=${encodeURIComponent(correoNivel(n).body)}">Enviar con mi correo</a> <button class="btn sec sm" type="button" data-nv="copy" data-p="${esc(n.placa)}">Copiar mensaje</button> <button class="btn sec sm" type="button" data-nv="wa" data-p="${esc(n.placa)}">WhatsApp</button></div>`).join('');
@@ -1512,11 +1519,11 @@ function renderNivelComb(){
     try{tb.disabled=true;const m=correoNivel(n,true);await cloud('sendEmail',m);toast('📧 Correo de prueba enviado a '+m.to)}catch(e){toast('No se pudo enviar: '+errCorreo(e))}finally{tb.disabled=false}};
   const gb=$('#nv-gs');if(gb)gb.onclick=()=>{const u=URL.createObjectURL(new Blob([$('#gs-correo').textContent],{type:'text/plain'})),a=document.createElement('a');a.href=u;a.download='Code.gs';a.click();setTimeout(()=>URL.revokeObjectURL(u),5000)};
   const nb=$('#nv-notif');if(nb){nb.style.display=('Notification' in window&&Notification.permission==='default')?'':'none';nb.onclick=()=>{try{Notification.requestPermission().then(()=>renderNivelComb())}catch(e){}}}
-  try{if('Notification' in window&&Notification.permission==='granted')bajos.forEach(n=>{const k='igc_nv_'+dIso(Date.now())+'_'+n.placa;if(!localStorage.getItem(k)){new Notification('Combustible bajo · '+n.placa,{body:msgNivel(n)});localStorage.setItem(k,'1')}})}catch(e){}
+  try{if('Notification' in window&&Notification.permission==='granted')bajos.forEach(n=>{const k='igc_nv_'+hoyCO()+'_'+n.placa;if(!localStorage.getItem(k)){new Notification('Combustible bajo · '+n.placa,{body:msgNivel(n)});localStorage.setItem(k,'1')}})}catch(e){}
 }
 function renderSatrack(){
   const lotes=S.satLotes;
-  $('#tbl-lotes').innerHTML=lotes.length?`<tr><th>Archivo</th><th>Cargado</th><th class="n">Registros vigentes</th><th></th></tr>`+lotes.map(l=>`<tr><td>${l.url?`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.archivo)}</a>`:esc(l.archivo)}${l.intervalo?'<div class="small muted">Intervalo: '+esc(l.intervalo)+'</div>':''}</td><td>${fdt(l.fecha)}</td><td class="n">${S.satrack.filter(s=>s.lote===l.id).length}</td><td class="n">${l.pdf?`<button class="btn sec sm" data-vp="${l.id}">Ver PDF</button> `:''}<button class="btn sec sm" data-dl="${l.id}">Eliminar registros</button></td></tr>`).join(''):'<tr><td class="muted">Aún no se ha cargado ningún informe de Satrack.</td></tr>';
+  $('#tbl-lotes').innerHTML=lotes.length?`<tr><th>Archivo</th><th>Cargado</th><th class="n">Registros vigentes</th><th></th></tr>`+lotes.map(l=>`<tr><td>${l.url?`<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.archivo)}</a>`:esc(l.archivo)}${l.intervalo?'<div class="small muted">Intervalo: '+esc(l.intervalo)+'</div>':''}</td><td>${fCarga(l.fecha)}</td><td class="n">${S.satrack.filter(s=>s.lote===l.id).length}</td><td class="n">${l.pdf?`<button class="btn sec sm" data-vp="${l.id}">Ver PDF</button> `:''}<button class="btn sec sm" data-dl="${l.id}">Eliminar registros</button></td></tr>`).join(''):'<tr><td class="muted">Aún no se ha cargado ningún informe de Satrack.</td></tr>';
   $$('#tbl-lotes [data-dl]').forEach(b=>b.onclick=()=>{if(confirm('¿Eliminar los registros de este informe? Los tanqueos y viajes no se tocan.')){S.satrack=S.satrack.filter(s=>s.lote!==b.dataset.dl);S.satLotes=S.satLotes.filter(l=>l.id!==b.dataset.dl);fDel('satpdf:'+b.dataset.dl);save();renderAll()}});
   $$('#tbl-lotes [data-vp]').forEach(b=>b.onclick=()=>spVer(b.dataset.vp));
   const sel=$('#sat-placa'),cur=sel.value,pl=[...new Set(S.satrack.map(s=>s.placa))].sort();
@@ -1672,7 +1679,7 @@ function loadDemo(){
   const c1='Conductor Ejemplo 1',c2='Conductor Ejemplo 2';
   [['2026-09-27T08:00',rA,c1],['2026-09-28T08:00',rA,c1],['2026-09-28T15:00',rB,c2],['2026-09-29T08:00',rA,c1],['2026-09-30T08:00',rA,c2],['2026-09-30T15:00',rA,c1]].forEach((x,i)=>V(i,x[0],x[1],x[2],null,null,null));
   [['2026-10-01T08:00',rA,c1,850000,850080,97],['2026-10-01T15:00',rB,c1,850080,850165,92],['2026-10-02T06:30',rA,c2,850165,850255,98],['2026-10-02T14:00',rA,c2,850255,850335,96],['2026-10-03T06:00',rA,c1,850335,850420,98],['2026-10-03T13:00',rA,c1,850420,850500,99]].forEach((x,i)=>V(10+i,x[0],x[1],x[2],x[3],x[4],x[5]));
-  const lote='demo'+k;S.satLotes.push({id:lote,archivo:'Informe de ejemplo (datos ficticios)',fecha:new Date().toISOString().slice(0,16)});
+  const lote='demo'+k;S.satLotes.push({id:lote,archivo:'Informe de ejemplo (datos ficticios)',fecha:ahoraCO()});
   const sat=(f,km,ral)=>{const t0=new Date(f+'T00:00').getTime();S.satrack.push({id:uid(),placa:'SZW818',t0,t1:t0+DIA-60000,km,ralentiH:ral,lote})};
   [['2026-09-27',130,3],['2026-09-28',140,3],['2026-09-29',125,3],['2026-09-30',135,3],['2026-10-01',190,5],['2026-10-02',195,5],['2026-10-03',195,5]].forEach(x=>sat(...x));
   const D=(id,fecha,odo,gal,obs)=>S.tanqueos.push({id:id+k,fecha,hora:'07:00',placa:'DEMO01',conductor:'Conductor Ejemplo 2',odo,gal,precio:null,full:true,satKm:null,ralentiH:null,obs:obs||'',fotoOdo:false,fotoComp:false});
@@ -1819,7 +1826,7 @@ async function diagnosticar(){
  finally{document.removeEventListener('securitypolicyviolation',onV);corriendo='';pintar();
   const peor=R.find(r=>r.e==='crit')||R.find(r=>r.e==='warn');
   const concl=peor?'<div class="concl"><b>Causa más probable:</b> '+dxEsc(peor.d)+(peor.a?'<br>'+dxEsc(peor.a):'')+'</div>':'<div class="concl"><b>✔ La conexión funciona.</b> Pulse «Guardar y conectar» para sincronizar.</div>';
-  dxTxt=['DIAGNÓSTICO IGC FUEL CONTROL · '+new Date().toLocaleString('es-CO'),'Página: '+location.protocol+'//'+(location.host||'(archivo local)'),'Navegador: '+navigator.userAgent,'URL: '+dxMask(url),'Token: '+(token?'escrito ('+token.length+' caracteres)':'vacío'),'']
+  dxTxt=['DIAGNÓSTICO IGC FUEL CONTROL · '+new Date().toLocaleString('es-CO',{timeZone:'America/Bogota'}),'Página: '+location.protocol+'//'+(location.host||'(archivo local)'),'Navegador: '+navigator.userAgent,'URL: '+dxMask(url),'Token: '+(token?'escrito ('+token.length+' caracteres)':'vacío'),'']
    .concat(R.map((r,i)=>(i+1)+'. ['+({ok:'OK',warn:'ALERTA',crit:'FALLA'}[r.e])+'] '+r.t+' — '+r.d+(r.a?' → '+r.a:''))).join('\n');
   const abrir=/^https:\/\//i.test(url)?'<p class="small"><a href="'+dxEsc(url)+'" target="_blank" rel="noopener">Abrir la URL en una pestaña nueva</a> (prueba manual: si muestra una pantalla de inicio de sesión de Google, el acceso no es «Cualquier persona»; si muestra texto, JSON o un error de «doGet», el acceso está bien).</p>':'';
   out.insertAdjacentHTML('beforeend',concl+'<div class="row" style="margin:10px 0"><button class="btn sec sm" id="dx-copy" type="button">Copiar informe</button><button class="btn sec sm" id="dx-again" type="button">Repetir diagnóstico</button></div>'+abrir
@@ -2051,7 +2058,7 @@ function abrirDocFac(id){const d=docsFac().find(x=>x.head.id===id);if(!d)return;
   if($('#dfa-rf').checked&&(rfp==null||rfp<0))return toast('Indique la tarifa de retención');
   if($('#dfa-ok').checked&&c.dif&&!txt&&!h.coment)return toast('Agregue un comentario que explique cómo se subsanó la diferencia');
   h.tqIds=[...DF.ids].join(',');h.pIni=DF.ini||'';h.pFin=DF.fin||'';h.rfOn=$('#dfa-rf').checked;h.rfPct=rfp;h.rfBase=num($('#dfa-rfb').value);h.difOk=$('#dfa-ok').checked&&c.dif;
-  if(txt)h.coment=(h.coment?h.coment+'\n':'')+fd(isoD(Date.now()))+' '+new Date().toTimeString().slice(0,5)+' · '+txt;
+  if(txt)h.coment=(h.coment?h.coment+'\n':'')+fCarga(ahoraCO())+' · '+txt;
   save();$('#dlg-fac').close();renderAll();toast('Conciliación guardada')};
  lista();$('#dlg-fac').showModal()}
 
@@ -2193,7 +2200,7 @@ async function exportPDF(sec){
   Chart.defaults.animation=an;if(prevTab!=='gerencial')goTab(prevTab)}
  const ancho=libros.some(([,W])=>Object.values(W).some(a=>(a[0]||[]).length>16)),
   doc=new J({orientation:'landscape',unit:'pt',format:ancho?'a3':'a4'}),PW=doc.internal.pageSize.getWidth(),PH=doc.internal.pageSize.getHeight(),M=28,fs=ancho?7.5:7,
-  ahora=new Date(),stamp=pad(ahora.getDate())+'/'+pad(ahora.getMonth()+1)+'/'+ahora.getFullYear()+' '+pad(ahora.getHours())+':'+pad(ahora.getMinutes());
+  stamp=fCarga(ahoraCO());
  let primera=true,y=0;
  const nueva=()=>{if(primera)primera=false;else doc.addPage();y=M};
  for(const [k,W] of libros){
@@ -2221,7 +2228,7 @@ async function exportPDF(sec){
  }
  const n=doc.getNumberOfPages();
  for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('IGC FUEL CONTROL · TRANSPORTE IGC S.A.S.',M,PH-16);doc.text('Página '+i+' de '+n,PW-M,PH-16,{align:'right'})}
- doc.save('IGC_'+NOMARCH[sec]+'_'+isoD(Date.now())+'.pdf');toast('PDF generado')}
+ doc.save('IGC_'+NOMARCH[sec]+'_'+hoyCO()+'.pdf');toast('PDF generado')}
 
 function libro(sec){
  const modo=S.config.baseKm,per=todosPeriodos().sort((a,b)=>dtT(a.B)-dtT(b.B)),W={},bn=BASES[modo],A=analisisTodo();
@@ -2246,7 +2253,7 @@ function libro(sec){
  if(sec==='facturas'){const D=docsFac().map(d=>({d,c:calcDoc(d)}));
   W['Conciliación por factura']=TT(['Estado','Factura','Proveedor','NIT','Fecha factura','Período desde','Período hasta','Gal. factura','Valor factura','N.º tanqueos','Gal. tanqueos','Valor tanqueos','Dif. gal','Dif. %','Dif. valor','Retención aplicada','Tarifa retención %','Base retención','Valor retenido','Neto a pagar','Comentarios'],D.map(({d,c})=>[c.e,d.factura,d.proveedor,d.head.nit||'',d.fecha,d.head.pIni||'',d.head.pFin||'',d.gal,d.valor,c.T.length,c.tg,c.tv,c.dg,c.pg,c.dv,c.rfOn?'Sí':'No',c.rfOn?c.pct:'',c.rfOn?c.base:'',c.ret,c.neto,(d.head.coment||'').replace(/\n/g,' | ')]));
   W['Tanqueos por factura']=TT(['Factura','Fecha tanqueo','Hora','Placa','Conductor','Galones','Precio gal.','Valor'],D.flatMap(({d,c})=>c.T.map(t=>[d.factura,t.fecha,t.hora||'',t.placa,t.conductor||'',t.gal,t.precio,isNum(t.precio)?t.gal*t.precio:null])))}
- if(sec==='satrack'){W['Registros Satrack']=TT(['Placa','Desde','Hasta','Km','Primer encendido','Último apagado','Horas de uso','Vel. prom','Vel. máx','Ubicación primer encendido','Ubicación último apagado','Ralentí h','Informe'],[...S.satrack].sort((a,b)=>a.t0-b.t0).map(s=>[s.placa,fT(s.t0),fT(s.t1),s.soloRal?'':s.km,s.primerEnc||'',s.ultimoApag||'',s.horasUso==null?'':+s.horasUso.toFixed(2),s.velProm==null?'':s.velProm,s.velMax==null?'':s.velMax,s.ubicIni||'',s.ubicFin||'',s.ralentiH,(S.satLotes.find(l=>l.id===s.lote)||{}).archivo||'']));W['Informes cargados']=TT(['Archivo','Cargado','Registros','Enlace Drive'],S.satLotes.map(l=>[l.archivo,l.fecha,S.satrack.filter(s=>s.lote===l.id).length,l.url||'']));W['Rendimiento diario']=TT(['Fecha','Placa','Km Satrack','Horas de uso','Vel. prom','Vel. máx','Ralentí h','Fuente ralentí','Gal. rodando','Gal. ralentí','Gal. totales estimados','Rendimiento km/gal','Gal/100 km','Dif. % vs estándar'],rendDiario().sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:a.placa<b.placa?-1:1).map(r=>[r.fecha,r.placa,r.km??'',r.uso??'',r.vp??'',r.vm??'',r.ralH??'',r.fuenteR,r.rod??'',r.ralG??'',r.tot??'',r.rend??'',r.g100??'',r.dev??'']))}
+ if(sec==='satrack'){W['Registros Satrack']=TT(['Placa','Desde','Hasta','Km','Primer encendido','Último apagado','Horas de uso','Vel. prom','Vel. máx','Ubicación primer encendido','Ubicación último apagado','Ralentí h','Informe'],[...S.satrack].sort((a,b)=>a.t0-b.t0).map(s=>[s.placa,fT(s.t0),fT(s.t1),s.soloRal?'':s.km,s.primerEnc||'',s.ultimoApag||'',s.horasUso==null?'':+s.horasUso.toFixed(2),s.velProm==null?'':s.velProm,s.velMax==null?'':s.velMax,s.ubicIni||'',s.ubicFin||'',s.ralentiH,(S.satLotes.find(l=>l.id===s.lote)||{}).archivo||'']));W['Informes cargados']=TT(['Archivo','Cargado','Registros','Enlace Drive'],S.satLotes.map(l=>[l.archivo,fCarga(l.fecha),S.satrack.filter(s=>s.lote===l.id).length,l.url||'']));W['Rendimiento diario']=TT(['Fecha','Placa','Km Satrack','Horas de uso','Vel. prom','Vel. máx','Ralentí h','Fuente ralentí','Gal. rodando','Gal. ralentí','Gal. totales estimados','Rendimiento km/gal','Gal/100 km','Dif. % vs estándar'],rendDiario().sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:a.placa<b.placa?-1:1).map(r=>[r.fecha,r.placa,r.km??'',r.uso??'',r.vp??'',r.vm??'',r.ralH??'',r.fuenteR,r.rod??'',r.ralG??'',r.tot??'',r.rend??'',r.g100??'',r.dev??'']))}
  if(sec==='gerencial'){
   const a=agg(per,modo);W['Indicadores']=TT(['Indicador','Valor'],[['Base de km',bn],['Períodos',a.n],['Km',a.km],['Galones',a.gal],['Gal/km',a.galkm],['Km/gal',a.kmgal],['Desviación %',a.desv],['Sobreconsumo gal',a.sobreGal],['Sobreconsumo $',a.sobreCosto],['Costo/km',a.costoKm],['Viajes',a.nViajes],['Costo/viaje',a.costoViaje]]);
   [['dia','Día'],['mes','Mes'],['conductor','Conductor'],['ruta','Ruta'],['vehiculo','Vehículo']].forEach(([d,n])=>W['Por '+n.toLowerCase()]=TT([n,'Gal. consumidos','Gasto','Km','Costo/km','Viajes',...REFS.flatMap(r=>['Dif. gal vs '+r[1],'Dif. % vs '+r[1]]),'Sobreconsumo $ (odómetro)'],analisisDim(per,d,modo).map(g=>[d==='mes'||d==='dia'?g.k:g.k,g.gal,g.galP>0?g.costo:null,g.km,g.kmP>0?g.costo/g.kmP:null,g.nV,...REFS.flatMap(r=>{const x=g.ref[r[0]];return x?[x.real-x.esp,x.esp>0?(x.real-x.esp)/x.esp*100:null]:[null,null]}),sobre$(g)])));
@@ -2261,7 +2268,7 @@ function exportXLSX(sec){
  if(typeof XLSX==='undefined')return toast('Exportar a Excel requiere conexión a internet (librería XLSX)');
  const secs=sec==='todo'?['resumen','tanqueos','viajes','preop','facturas','satrack','gerencial','config']:[sec],wb=XLSX.utils.book_new(),us=new Set();
  secs.forEach(s=>Object.entries(libro(s)).forEach(([n,a])=>{let nm=n.slice(0,31);if(us.has(nm))nm=nm.slice(0,27)+'_'+us.size;us.add(nm);const ws=XLSX.utils.aoa_to_sheet(a);ws['!cols']=(a[0]||[]).map(()=>({wch:18}));XLSX.utils.book_append_sheet(wb,ws,nm)}));
- XLSX.writeFile(wb,'IGC_'+({resumen:'conciliacion',tanqueos:'tanqueos',viajes:'viajes',preop:'preoperacional',facturas:'facturas',satrack:'satrack',gerencial:'gerencial',config:'configuracion',todo:'completo'}[sec])+'_'+isoD(Date.now())+'.xlsx')}
+ XLSX.writeFile(wb,'IGC_'+({resumen:'conciliacion',tanqueos:'tanqueos',viajes:'viajes',preop:'preoperacional',facturas:'facturas',satrack:'satrack',gerencial:'gerencial',config:'configuracion',todo:'completo'}[sec])+'_'+hoyCO()+'.xlsx')}
 
 function renderCloudCfg(){$('#cl-url').value=CL.url||'';$('#cl-tok').value=CL.token||'';$('#c-tpre').value=S.config.tolPreop;$('#c-tfp').value=S.config.tolFacPct;$('#c-tfd').value=S.config.tolFacDias;$('#c-tfv').value=S.config.tolFacValor;$('#c-rfp').value=S.config.rfPct}
 function initExtra(){
@@ -2316,8 +2323,8 @@ async function satProbar(){
 async function satApiSync(){
   if(!CL.url)return toast('Configure primero la conexión con Apps Script');
   if(satSyncing)return toast('Ya hay una sincronización en curso');
-  const hoy=isoD(Date.now()),min=isoD(Date.now()-5*DIA);
-  const d=prompt('Desde (AAAA-MM-DD). Satrack solo conserva los últimos 5 días ('+min+' en adelante):',isoD(Date.now()-2*DIA));if(!d)return;
+  const hoy=hoyCO(),min=addDias(hoyCO(),-5);
+  const d=prompt('Desde (AAAA-MM-DD). Satrack solo conserva los últimos 5 días ('+min+' en adelante):',addDias(hoyCO(),-2));if(!d)return;
   const h=prompt('Hasta (AAAA-MM-DD):',hoy);if(!h)return;
   const re=/^\d{4}-\d{2}-\d{2}$/;
   if(!re.test(d)||!re.test(h)||isNaN(Date.parse(d+'T00:00'))||isNaN(Date.parse(h+'T00:00')))return toast('Use el formato AAAA-MM-DD');
@@ -2437,7 +2444,7 @@ async function scDiag(){
   box.innerHTML='<div class="banner na">Ejecutando el diagnóstico de Satrack en el servidor (puede tardar hasta un minuto)…</div>';btn.disabled=true;
   try{
     const j=await cloud('satrack_diagnostico',{},null,120000),P=j.pasos||[],ic={ok:'OK',warn:'AVISO',crit:'FALLO'},
-      txt='Diagnóstico Satrack · '+new Date().toLocaleString('es-CO')+'\n'+P.map(p=>'['+(ic[p.estado]||p.estado)+'] '+p.titulo+(p.detalle?' — '+p.detalle:'')).join('\n');
+      txt='Diagnóstico Satrack · '+new Date().toLocaleString('es-CO',{timeZone:'America/Bogota'})+'\n'+P.map(p=>'['+(ic[p.estado]||p.estado)+'] '+p.titulo+(p.detalle?' — '+p.detalle:'')).join('\n');
     box.innerHTML='<h3 style="margin:0 0 6px">Diagnóstico de la conexión con Satrack</h3>'+
       P.map(p=>'<div class="banner '+esc(p.estado)+'" style="margin:6px 0"><b>'+esc(p.titulo)+'</b>'+(p.detalle?'<div class="small" style="margin-top:2px">'+esc(p.detalle)+'</div>':'')+'</div>').join('')+
       '<div class="row" style="margin-top:8px"><button class="btn sec sm" type="button" id="sc-diag-copy">Copiar diagnóstico</button></div>'+
@@ -2456,9 +2463,9 @@ function satCfgWire(){
 
 /* ===================== SATRACK: VISTA COMPLETA DE TELEMETRÍA ===================== */
 function satLiveInit(){
-  const hoy=isoD(Date.now()),min=isoD(Date.now()-5*DIA);
+  const hoy=hoyCO(),min=addDias(hoyCO(),-5);
   const a=$('#sat-live-inicio'),b=$('#sat-live-fin');
-  if(a&&!a.value)a.value=isoD(Date.now()-DIA);
+  if(a&&!a.value)a.value=addDias(hoyCO(),-1);
   if(b&&!b.value)b.value=hoy;
 }
 function satLivePlacas(){
@@ -2525,7 +2532,7 @@ async function satLiveConsultar(ultimo=false){
       const inicio=$('#sat-live-inicio').value,fin=$('#sat-live-fin').value;
       if(!inicio||!fin)throw new Error('Seleccione la fecha inicial y final.');
       if(inicio>fin)throw new Error('La fecha inicial no puede ser posterior a la final.');
-      const hoy=isoD(Date.now()),min=isoD(Date.now()-5*DIA);
+      const hoy=hoyCO(),min=addDias(hoyCO(),-5);
       if(inicio<min||fin>hoy)throw new Error('La API permite consultar solo la ventana reciente de cinco días ('+min+' a '+hoy+').');
       j=await cloud('satrack_historial',{placas,fechaInicio:inicio,fechaFin:fin,itemsPerPage:Number($('#sat-live-items').value)||100,limiteVelocidad:Number($('#sat-live-limite').value)||null},null,240000);
     }
@@ -2609,21 +2616,21 @@ async function satPdfAbrir(files){
     toast(auto.length+' PDF cargado(s) automáticamente: ralentí guardado en su día'+(rs.sinKm?' ('+rs.sinKm+' día(s) aún sin km del informe Excel/API)':''))}
   spRender()}
 function spRender(){
-  const o=$('#sp-out'),auto=SPAUTO.length?`<h3 style="margin:0 0 6px">Cargados automáticamente</h3><div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Día(s)</th><th class="n">Ralentí (h)</th><th></th></tr>${SPAUTO.slice(0,15).map(a=>`<tr><td>${esc(a.nombre)}</td><td><b>${esc(a.placa)}</b></td><td>${a.segs.map(g=>fd(dIso(g.t0))+': <b>'+fmt(g.ral,2)+' h</b>').join('<br>')}</td><td class="n">${fmt(a.segs.reduce((x,g)=>x+g.ral,0),2)}</td><td><button class="btn sec sm" type="button" data-spu="${a.lote}">Deshacer</button></td></tr>`).join('')}</table></div><p class="muted small">El ralentí se leyó del PDF y quedó en el día que trae el informe. Verifique los valores; «Deshacer» elimina esa carga.</p>`:'';
-  if(!SP.length){o.innerHTML=auto;$$('#sp-out [data-spu]').forEach(b=>b.onclick=()=>spDeshacer(b.dataset.spu));return}
+  const o=$('#sp-out'),auto=SPAUTO.length?`<h3 style="margin:0 0 6px">Cargados automáticamente</h3><div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Día(s)</th><th class="n">Ralentí (h)</th><th></th></tr>${SPAUTO.slice(0,15).map(a=>`<tr><td>${esc(a.nombre)}</td><td><b>${esc(a.placa)}</b></td><td>${a.segs.map(g=>fd(dIso(g.t0))+': <b>'+fmt(g.ral,2)+' h</b>').join('<br>')}</td><td class="n">${fmt(a.segs.reduce((x,g)=>x+g.ral,0),2)}</td><td><button class="btn sec sm" type="button" data-spl="${a.lote}">Ver PDF</button> <button class="btn sec sm" type="button" data-spu="${a.lote}">Deshacer</button></td></tr>`).join('')}</table></div><p class="muted small">El ralentí se leyó del PDF y quedó en el día que trae el informe. Verifique los valores; «Deshacer» elimina esa carga.</p>`:'';
+  if(!SP.length){o.innerHTML=auto;$$('#sp-out [data-spu]').forEach(b=>b.onclick=()=>spDeshacer(b.dataset.spu));spWireVer();return}
   const pls=[...new Set(S.vehiculos.map(v=>v.placa).concat(placas()))].sort();
   o.innerHTML='<div class="wrap"><table class="tbl"><tr><th>Archivo</th><th>Vehículo</th><th>Informe de un día o intervalo entre tanqueos</th><th class="n">Ralentí (h) *</th><th></th></tr>'+SP.map((r,i)=>{const iv=spIntervalos(r.placa);
     return `<tr><td><b>${esc(r.nombre)}</b><div class="small ${r.aviso?'bad':(r.ral!=null||r.dias)?'good':'muted'}">${r.aviso?esc(r.aviso):(r.dias?'Ralentí leído de '+r.dias.length+' día(s): seleccione el vehículo':(r.ral!=null?'Ralentí leído del PDF: verifíquelo':'No se detectó el ralentí: digítelo'))}</div><details class="man"><summary>Texto leído</summary><pre class="small" style="white-space:pre-wrap;max-width:360px;max-height:160px;overflow:auto">${esc(r.txt||'(sin texto)')}</pre></details></td>
     <td><select data-sp="placa" data-i="${i}"><option value="">—</option>${pls.map(p=>`<option ${p===r.placa?'selected':''}>${esc(p)}</option>`).join('')}</select></td>
     <td><select data-sp="key" data-i="${i}"><option value="">— Seleccione —</option><option value="__d" ${r.key==='__d'?'selected':''}>Un solo día (informe diario)</option>${iv.map(x=>`<option value="${esc(x.key)}" ${x.key===r.key?'selected':''}>${esc(x.txt)}</option>`).join('')}<option value="__m" ${r.key==='__m'?'selected':''}>Otro intervalo (manual)</option></select>${r.key==='__d'?`<div class="row" style="margin-top:6px"><input type="date" data-sp="dia" data-i="${i}" value="${esc(r.dia)}"></div>`:''}${r.key==='__m'?`<div class="row" style="margin-top:6px"><input type="datetime-local" data-sp="mt0" data-i="${i}" value="${esc(r.mt0)}"><input type="datetime-local" data-sp="mt1" data-i="${i}" value="${esc(r.mt1)}"></div>`:''}</td>
     <td class="n">${r.dias?r.dias.map(d=>fd(dIso(d.t))+': '+fmt(d.ral,2)+' h').join('<br>'):`<input type="number" min="0" step="0.1" data-sp="ral" data-i="${i}" value="${r.ral==null?'':+r.ral.toFixed(2)}" style="width:90px">`}</td>
-    <td><button class="btn sec sm" type="button" data-spx="${i}">Quitar</button></td></tr>`}).join('')+'</table></div><div class="row" style="margin-top:10px"><button class="btn" type="button" id="sp-ok">Guardar estadísticas</button><button class="btn sec" type="button" id="sp-cancel">Cancelar</button></div><p class="muted small">Estos PDF no se pudieron ubicar solos (falta el vehículo, la fecha o el ralentí). Elija «Un solo día» y la fecha, o un intervalo entre tanqueos. Cuando el PDF trae el vehículo, el día y el ralentí, se guarda automáticamente en su día.</p>'+auto;
+    <td><button class="btn sec sm" type="button" data-spv="${i}">Ver PDF</button> <button class="btn sec sm" type="button" data-spx="${i}">Quitar</button></td></tr>`}).join('')+'</table></div><div class="row" style="margin-top:10px"><button class="btn" type="button" id="sp-ok">Guardar estadísticas</button><button class="btn sec" type="button" id="sp-cancel">Cancelar</button></div><p class="muted small">Estos PDF no se pudieron ubicar solos (falta el vehículo, la fecha o el ralentí). Elija «Un solo día» y la fecha, o un intervalo entre tanqueos. Cuando el PDF trae el vehículo, el día y el ralentí, se guarda automáticamente en su día.</p>'+auto;
   $$('#sp-out [data-sp]').forEach(e=>e.onchange=()=>{const r=SP[+e.dataset.i],k=e.dataset.sp;
     if(k==='placa'){r.placa=e.value;r.key='';spRender();return}
     if(k==='key'){r.key=e.value;if(e.value==='__d'&&!r.dia&&r.fileDia)r.dia=r.fileDia;spRender();return}
     if(k==='ral')r.ral=num(e.value);else r[k]=e.value});
   $$('#sp-out [data-spx]').forEach(b=>b.onclick=()=>{SP.splice(+b.dataset.spx,1);spRender()});
-  $('#sp-cancel').onclick=()=>{SP=[];spRender()};$('#sp-ok').onclick=spGuardar;$$('#sp-out [data-spu]').forEach(b=>b.onclick=()=>spDeshacer(b.dataset.spu))}
+  $('#sp-cancel').onclick=()=>{SP=[];spRender()};$('#sp-ok').onclick=spGuardar;$$('#sp-out [data-spu]').forEach(b=>b.onclick=()=>spDeshacer(b.dataset.spu));spWireVer()}
 async function spPersistir(items){
   let sinKm=0;
   for(const it of items){
@@ -2634,7 +2641,7 @@ async function spPersistir(items){
       /* un PDF diario solo reemplaza el ralentí diario de ese mismo día; uno de intervalo, el de su intervalo */
       S.satrack=S.satrack.filter(x=>!(x.soloRal&&(diario?(x.t1-x.t0<DIA&&dIso(x.t0)===dIso(g.t0)&&x.placa===it.placa):dentro(x))));
       S.satrack.push({id:uid(),placa:it.placa,t0:g.t0,t1:g.t1,km:0,ralentiH:g.ral,lote,soloRal:true})});
-    S.satLotes.push({id:lote,archivo:it.nombre,fecha:new Date().toISOString().slice(0,16),pdf:true,intervalo:it.placa+' · '+it.txt+' · solo ralentí'+(it.diario?' (diario)':'')});
+    S.satLotes.push({id:lote,archivo:it.nombre,fecha:ahoraCO(),pdf:true,intervalo:it.placa+' · '+it.txt+' · solo ralentí'+(it.diario?' (diario)':'')});
     it.lote=lote;
     try{await fPut('satpdf:'+lote,it.file)}catch(e){}
     subirArchivoSat(lote,it.file)}
@@ -2662,10 +2669,22 @@ async function spGuardar(){
   items.forEach(it=>SPAUTO.unshift({lote:it.lote,placa:it.placa,nombre:it.nombre,segs:it.segs}));
   SP=[];spRender();toast(items.length+' ralentí(es) guardado(s); los km de Satrack no se modificaron'+(rs.sinKm?' ('+rs.sinKm+' día(s)/intervalo(s) aún sin informe Excel/API: cargue el Excel para tener los km)':''))
 }
+/* Visor de PDF dentro del aplicativo (con opciones para abrir en pestaña nueva y descargar) */
+function verPdf(file,nombre,url){
+  const prev=$('#pdf-modal');if(prev)prev.remove();
+  const u=file?URL.createObjectURL(new Blob([file],{type:'application/pdf'})):null,nm=nombre||'informe.pdf';
+  const m=document.createElement('div');m.id='pdf-modal';m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML=`<div style="background:#fff;border-radius:10px;width:min(1000px,100%);height:min(92vh,100%);display:flex;flex-direction:column;overflow:hidden"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid #ddd"><b style="flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nm)}</b>${u?`<a class="btn sec sm" href="${u}" target="_blank" rel="noopener">Abrir en pestaña nueva</a><a class="btn sec sm" href="${u}" download="${esc(nm)}">Descargar</a>`:(url?`<a class="btn sec sm" href="${esc(url)}" target="_blank" rel="noopener">Abrir en Drive</a>`:'')}<button class="btn sm" type="button" id="pdf-x">Cerrar</button></div>${u?`<iframe src="${u}" title="${esc(nm)}" style="flex:1;border:0;width:100%"></iframe>`:`<p style="padding:20px">El PDF no está guardado en este navegador${url?'; ábralo desde Drive con el botón de arriba.':' (se adjuntó en otro equipo o sin conexión a Drive).'}</p>`}</div>`;
+  document.body.appendChild(m);
+  const esc2=e=>{if(e.key==='Escape')cerrar()},cerrar=()=>{m.remove();document.removeEventListener('keydown',esc2);if(u)URL.revokeObjectURL(u)};
+  document.addEventListener('keydown',esc2);$('#pdf-x').onclick=cerrar;m.onclick=e=>{if(e.target===m)cerrar()};
+}
 async function spVer(id){
-  let f=null;try{f=await fGet('satpdf:'+id)}catch(e){}
-  if(f){const u=URL.createObjectURL(f);window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),60000)}
-  else{const l=S.satLotes.find(x=>x.id===id);if(l&&l.url)window.open(l.url,'_blank');else toast('El PDF no está disponible en este navegador (se adjuntó en otro equipo o sin conexión a Drive)')}}
+  const l=S.satLotes.find(x=>x.id===id);let f=null;try{f=await fGet('satpdf:'+id)}catch(e){}
+  verPdf(f,l?l.archivo:'informe.pdf',l&&l.url)}
+function spWireVer(){
+  $$('#sp-out [data-spv]').forEach(b=>b.onclick=()=>{const r=SP[+b.dataset.spv];verPdf(r.file,r.nombre)});
+  $$('#sp-out [data-spl]').forEach(b=>b.onclick=()=>spVer(b.dataset.spl))}
 function satPdfWire(){$('#sp-btn').onclick=()=>$('#sp-file').click();$('#sp-file').onchange=e=>{if(e.target.files.length)satPdfAbrir([...e.target.files]);e.target.value=''}}
 
 /* ===================== Arranque ===================== */
@@ -3197,7 +3216,7 @@ function respaldoDiario() {
 
   const fecha = Utilities.formatDate(
     new Date(),
-    Session.getScriptTimeZone(),
+    'America/Bogota',
     'yyyy-MM-dd'
   );
 
