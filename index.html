@@ -518,7 +518,10 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <div><label>Retención en la fuente por defecto (%) — compra de combustible</label><input type="number" id="c-rfp" min="0" step="0.05"></div>
     </div>
     <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="cl-dx" type="button">🩺 Diagnosticar conexión</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button><button class="btn sec" id="pdf-todo" type="button">⬇ Exportar TODO a PDF</button></div>
-    <h3 style="margin-top:16px">Conectar otro dispositivo sin volver a escribir nada</h3>
+    <h3 style="margin-top:16px">Archivo con conexión incluida (para todos los dispositivos)</h3>
+    <p class="muted small" style="margin-top:0"><b>Hágalo una sola vez</b> en el equipo ya conectado: pulse «Generar copia con conexión incluida» y use el archivo descargado en todos los dispositivos. Al abrirlo se conecta y descarga todo de Google Sheets sin pedir configuración. El archivo contiene el token de acceso: no lo publique en un sitio abierto. Si cambia la URL o el token, genere la copia de nuevo.</p>
+    <div class="row"><button class="btn" id="cl-gen" type="button">⬇ Generar copia con conexión incluida</button></div>
+    <h3 style="margin-top:16px">Alternativa: conectar un dispositivo con enlace o código</h3>
     <p class="muted small" style="margin-top:0">En este equipo (ya conectado) pulse «Copiar enlace / código». En el otro dispositivo abra el enlace, o pegue el código abajo y pulse «Aplicar». Quien tenga el enlace o código puede leer y modificar sus datos: compártalo solo con personas autorizadas y por un canal privado.</p>
     <div class="row"><button class="btn sec" id="cl-link" type="button">📋 Copiar enlace / código de conexión</button></div>
     <div class="grid" style="margin-top:8px"><div><label>Pegar enlace o código de conexión</label><input id="cl-code" placeholder="https://…#cfg=… o código" autocomplete="off" spellcheck="false"></div><div class="row" style="align-self:end"><button class="btn sec" id="cl-apply" type="button">Aplicar y sincronizar</button></div></div>
@@ -1721,7 +1724,7 @@ function leerTabla(file){return new Promise((res,rej)=>{const ext=file.name.spli
 
 /* ---------- Google Sheets (Apps Script) ---------- */
 const CK='igc_cloud',DK='igc_dirty';
-/* CONEXIÓN INCRUSTADA (opcional): si este archivo es PRIVADO, escriba aquí una sola vez la URL de Apps Script y el APP_TOKEN y todo dispositivo que abra el archivo se conectará solo. NO lo haga si el archivo está en un sitio público. */
+/* CONEXIÓN INCRUSTADA: la completa el botón «Generar copia con conexión incluida» (Configuración). Con ella, cualquier dispositivo que abra este archivo se conecta y sincroniza solo. Este archivo contiene el token: manténgalo privado. */
 const CONEXION_FIJA={url:'',token:''};
 let CL={};try{CL=JSON.parse(localStorage.getItem(CK)||'{}')}catch(e){}
 let cnxOrigen='';
@@ -1731,7 +1734,7 @@ function cnxLeer(txt){try{txt=String(txt||'').trim();const m=/cfg=([A-Za-z0-9_\-
 (function(){
  try{const m=/[#&]cfg=/.exec(location.hash||'');
   if(m){const c=cnxLeer(location.hash);if(c){CL=c;localStorage.setItem(CK,JSON.stringify(CL));cnxOrigen='enlace'}try{history.replaceState(null,'',location.href.split('#')[0])}catch(e){}}}catch(e){}
- try{if(!cnxValida(CL)&&cnxValida(CONEXION_FIJA)){CL={url:CONEXION_FIJA.url.trim(),token:CONEXION_FIJA.token.trim()};try{localStorage.setItem(CK,JSON.stringify(CL))}catch(e){}cnxOrigen='archivo'}}catch(e){}
+ try{if(cnxValida(CONEXION_FIJA)&&(CL.url!==CONEXION_FIJA.url.trim()||CL.token!==CONEXION_FIJA.token.trim())){CL={url:CONEXION_FIJA.url.trim(),token:CONEXION_FIJA.token.trim()};try{localStorage.setItem(CK,JSON.stringify(CL))}catch(e){}cnxOrigen='archivo'}}catch(e){}
 })();
 const COLS=['vehiculos','conductores','rutas','tanqueos','viajes','satrack','satLotes','facturas','preop'];
 let pulled=false,pushT=null;
@@ -1746,7 +1749,7 @@ function schedPush(){if(!CL.url)return;try{localStorage.setItem(DK,String(Date.n
 async function push(){pushT=null;const marca=localStorage.getItem(DK);try{const d={config:[S.config]};COLS.forEach(k=>d[k]=S[k]);await cloud('saveAll',{data:d});if(localStorage.getItem(DK)===marca)localStorage.removeItem(DK);setSync('● Sincronizado con Google Sheets','#4cc27e')}catch(e){setSync('● Error al guardar en Sheets: '+e.message+' — clic aquí para diagnosticar','#ff7b80')}}
 let lastPull=0;
 async function pull(opt){opt=opt||{};
- if(!CL.url)return setSync('● Sin conexión a Google Sheets (solo este navegador) — configúrela en Configuración','#f0b43c');
+ if(!CL.url)return setSync('● Sin conexión a Google Sheets (solo este navegador) — use la copia con conexión incluida (Configuración)','#f0b43c');
  try{
   if(!opt.silent)setSync('● Descargando de Google Sheets…','#f0b43c');
   const d=(await cloud('loadAll')).data||{},hasCfg=!!(d.config&&d.config[0]&&Object.keys(d.config[0]).length),has=hasCfg||COLS.some(k=>(d[k]||[]).length);
@@ -2329,6 +2332,16 @@ function initExtra(){
  $('#cl-down').onclick=()=>{if(!CL.url)return toast('Configure primero la URL');if(confirm('Esto reemplaza los datos de este navegador con los de Google Sheets. ¿Continuar?')){pulled=false;pull({force:true})}};
  $('#sat-api').onclick=satApiSync;$('#sat-test').onclick=satProbar;satCfgWire();
  $('#cl-dx').onclick=diagnosticar;
+ $('#cl-gen').onclick=async()=>{if(!cnxValida(CL))return toast('Primero guarde una URL y un token válidos con «Guardar y conectar»');
+  const RX=/const CONEXION_FIJA=\{[^}]*\};/;
+  let t=null;
+  if(/^https?:$/.test(location.protocol)){try{const r=await fetch(location.href.split('#')[0],{cache:'no-store'});if(r.ok){const x=await r.text();if(RX.test(x))t=x}}catch(e){}}
+  if(!t){toast('Elija en el selector este mismo archivo HTML del aplicativo');
+   t=await new Promise(res=>{const i=document.createElement('input');i.type='file';i.accept='.html,.htm';i.onchange=()=>{const f=i.files[0];if(!f)return res(null);const rd=new FileReader();rd.onload=()=>res(String(rd.result));rd.onerror=()=>res(null);rd.readAsText(f)};i.oncancel=()=>res(null);i.click()})}
+  if(!t||!RX.test(t))return toast('No se pudo leer el archivo. Seleccione el HTML del aplicativo (versión v6)');
+  t=t.replace(RX,()=>'const CONEXION_FIJA='+JSON.stringify({url:CL.url,token:CL.token})+';');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/html;charset=utf-8'}));a.download='IGC_FUEL_CONTROL_con_conexion.html';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast('Listo: use «IGC_FUEL_CONTROL_con_conexion.html» en todos sus dispositivos')};
  $('#cl-link').onclick=async()=>{if(!cnxValida(CL))return toast('Primero guarde una URL y un token válidos');
   const cod=cnxCodigo(CL),web=/^https?:$/.test(location.protocol),txt=web?location.href.split('#')[0]+'#cfg='+cod:cod;
   try{await navigator.clipboard.writeText(txt);toast(web?'Enlace de conexión copiado':'Código de conexión copiado (este archivo no está publicado en la web: en el otro dispositivo abra el aplicativo y péguelo en «Aplicar»)')}catch(e){prompt('Copie este '+(web?'enlace':'código')+':',txt)}};
