@@ -1151,12 +1151,19 @@ function renderTanqueos(){
 }
 async function verFoto(k){
   const [id,tipo]=k.split(':'),r=S.tanqueos.find(x=>x.id===id);if(!r)return;
-  const n=Math.max(1,nFoto(tipo==='odo'?r.fotoOdo:r.fotoComp)),urls=[];
-  for(let i=0;i<n;i++){try{const u=await fGet(fk(id,tipo,i));if(u)urls.push(u)}catch(e){}}
-  $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tipo==='odo'?'Fotos del odómetro':'Comprobantes de combustible'}${urls.length>1?' ('+urls.length+')':''}</h3>
-    <p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmtG(r.gal)} gal${r.full?' (full)':''}${r.tirilla?' · Tirilla <b>'+esc(r.tirilla)+'</b>':''} · Conductor ${esc(r.conductor)}</p>
-    ${urls.length?urls.map((u,i)=>`<img src="${u}" alt="Foto ${i+1}" style="margin-bottom:8px">`).join(''):'<p class="muted">La imagen no está disponible en este navegador.</p>'}`;
-  $('#dlg').showModal();
+  const n=Math.max(1,nFoto(tipo==='odo'?r.fotoOdo:r.fotoComp)),urls=[],tit=tipo==='odo'?'Fotos del odómetro':'Comprobantes de combustible';
+  const info=`<p class="small">Vehículo <b>${esc(r.placa)}</b> · ${fd(r.fecha)} ${esc(r.hora||'')} · Kilometraje <b>${fmt(r.odo)}</b> km · Tanqueo ${fmtG(r.gal)} gal${r.full?' (full)':''}${r.tirilla?' · Tirilla <b>'+esc(r.tirilla)+'</b>':''} · Conductor ${esc(r.conductor)}</p>`;
+  $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tit}</h3>${info}<p class="muted">Cargando fotos…</p>`;
+  if(!$('#dlg').open)$('#dlg').showModal();
+  fotoErr='';
+  for(let i=0;i<n;i++){try{const u=await fGetAny(fk(id,tipo,i));if(u)urls.push(u)}catch(e){}}
+  let vacio='La imagen no está disponible.';
+  if(!CL.url)vacio+=' Este navegador no está conectado a Google Sheets/Drive: use la copia con conexión incluida (Configuración).';
+  else if(/no soportada|unsupported/i.test(fotoErr))vacio+=' El Apps Script aún no tiene la función de fotos: reemplace Code.gs (Configuración → «Descargar Code.gs»), ejecute cualquier función una vez para autorizar Drive y publique una <b>Nueva versión</b>.';
+  else if(fotoErr)vacio+=' No se pudo consultar Drive: '+esc(fotoErr);
+  else vacio+=' Si se tomó en otro equipo, ábralo allí una vez con conexión para que se suba a Google Drive.';
+  $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tit}${urls.length>1?' ('+urls.length+')':''}</h3>${info}
+    ${urls.length?urls.map((u,i)=>`<img src="${u}" alt="Foto ${i+1}" style="margin-bottom:8px">`).join(''):'<p class="muted">'+vacio+'</p>'}`;
 }
 function limpiarFormTanqueo(){
   editing=null;pend=nuevoPend();$('#f-tanqueo').reset();$('#t-full').checked=true;
@@ -1175,7 +1182,7 @@ function editarTanqueo(id){
 }
 async function borrarTanqueo(id){
   if(!confirm('¿Borrar este registro de tanqueo? Esta acción es manual y no se puede deshacer.'))return;
-  const t=S.tanqueos.find(x=>x.id===id);if(t){for(let i=0;i<Math.max(1,nFoto(t.fotoOdo));i++)fDel(fk(id,'odo',i));for(let i=0;i<Math.max(1,nFoto(t.fotoComp));i++)fDel(fk(id,'comp',i))}
+  const t=S.tanqueos.find(x=>x.id===id);if(t){for(let i=0;i<Math.max(1,nFoto(t.fotoOdo));i++){fDel(fk(id,'odo',i));fCloudDel(fk(id,'odo',i))}for(let i=0;i<Math.max(1,nFoto(t.fotoComp));i++){fDel(fk(id,'comp',i));fCloudDel(fk(id,'comp',i))}}
   S.tanqueos=S.tanqueos.filter(x=>x.id!==id);save();renderAll();toast('Registro borrado');
 }
 function totalLive(){const g=num($('#t-gal').value),p=num($('#t-precio').value);$('#t-total').textContent=(g!=null&&p!=null)?'Total del tanqueo: '+money(g*p):''}
@@ -1202,10 +1209,11 @@ async function guardarTanqueo(ev){
     if(!confirm('La lectura del odómetro presenta una inconsistencia. El registro se guardará marcado para revisión, sin modificar ni descartar el dato. ¿Continuar?'))return;
   }
   const prev=editing?S.tanqueos.find(x=>x.id===editing):null;
+  const subidas=[];
   const guardarFotos=async(tipo,campo)=>{
     const nPrev=prev?nFoto(prev[campo]):0;let n=pend.clr[tipo]?0:nPrev;
-    if(pend.clr[tipo])for(let i=0;i<Math.max(1,nPrev);i++)await fDel(fk(r.id,tipo,i));
-    for(const u of pend[tipo]){await fPut(fk(r.id,tipo,n),u);n++}
+    if(pend.clr[tipo])for(let i=0;i<Math.max(1,nPrev);i++){await fDel(fk(r.id,tipo,i));await fCloudDel(fk(r.id,tipo,i))}
+    for(const u of pend[tipo]){await fPut(fk(r.id,tipo,n),u);subidas.push(fCloudPut(fk(r.id,tipo,n),u));n++}
     return n};
   try{r.fotoOdo=await guardarFotos('odo','fotoOdo');r.fotoComp=await guardarFotos('comp','fotoComp')}
   catch(e){toast('No se pudieron guardar las fotos en este navegador');r.fotoOdo=prev?nFoto(prev.fotoOdo):0;r.fotoComp=prev?nFoto(prev.fotoComp):0}
@@ -1213,6 +1221,7 @@ async function guardarTanqueo(ev){
   let aviso=null;
   if(!S.vehiculos.find(v=>v.placa===r.placa)){S.vehiculos.push({placa:r.placa,capacidad:null,std:0.15,ralenti:null});aviso='Vehículo '+r.placa+' agregado con estándar inicial 0,150 gal/km: calibrar en Configuración'}
   save();limpiarFormTanqueo();renderAll();toast(aviso||'Tanqueo guardado');
+  if(subidas.length)Promise.all(subidas).then(rs=>{if(rs.some(x=>!x)){toast('Alguna foto no se subió a Google Drive; se reintentará automáticamente');fotosHecho=false;syncFotos(true)}})
 }
 function fotoInput(btn,input,key,out){
   $(btn).onclick=()=>$(input).click();
@@ -1756,10 +1765,35 @@ async function pull(opt){opt=opt||{};
   if(has){const o={config:(d.config&&d.config[0])||{}};COLS.forEach(k=>o[k]=d[k]||[]);const nS=normState(o);
    if(JSON.stringify(nS)!==JSON.stringify(S)){S=nS;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}renderAll();renderCloudCfg()}}
   pulled=true;lastPull=Date.now();setSync('● Sincronizado con Google Sheets','#4cc27e');
-  if(!has&&COLS.some(k=>S[k].length))push()}
+  if(!has&&COLS.some(k=>S[k].length))push();
+  setTimeout(()=>syncFotos(),1500)}
  catch(e){setSync(opt.silent?'● Sin conexión con Sheets (se reintentará) — clic aquí para diagnosticar':'● Sin conexión con Sheets: '+e.message+' — clic aquí para diagnosticar',opt.silent?'#f0b43c':'#ff7b80')}}
 /* Refresco automático: al volver a la pestaña/app y cada 2 minutos, si no hay cambios locales pendientes ni un formulario en edición */
 function autoRefresh(){if(!CL.url||!pulled||document.hidden||pushT||localStorage.getItem(DK)||Date.now()-lastPull<30000)return;const a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.closest('form'))return;pull({silent:true})}
+/* ---------- Fotos en Google Drive (vía Apps Script): visibles desde cualquier dispositivo ---------- */
+const fnom=k=>String(k).replace(/[^A-Za-z0-9_.-]/g,'_')+'.jpg';
+let fotoErr='';
+async function fCloudPut(k,u){if(!CL.url)return false;try{await cloud('putFoto',{name:fnom(k),b64:String(u).split(',')[1]||''},null,120000);return true}catch(e){fotoErr=e.message||String(e);return false}}
+async function fCloudGet(k){if(!CL.url)return null;try{const j=await cloud('getFoto',{name:fnom(k)},null,90000);return j.b64?'data:'+(j.mime||'image/jpeg')+';base64,'+j.b64:null}catch(e){fotoErr=e.message||String(e);return null}}
+async function fCloudDel(k){if(!CL.url)return;try{await cloud('delFoto',{name:fnom(k)})}catch(e){fotoErr=e.message||String(e)}}
+/* Lee la foto del navegador; si no está (otro equipo), la baja de Drive y la guarda en este navegador para la próxima vez */
+async function fGetAny(k){let u=null;try{u=await fGet(k)}catch(e){}if(u)return u;u=await fCloudGet(k);if(u){try{await fPut(k,u)}catch(e){}}return u}
+/* Sube a Drive las fotos que este navegador tiene y Drive aún no (incluye las tomadas antes de esta actualización) */
+let fotosBusy=false,fotosHecho=false;
+async function syncFotos(force){
+ if(!CL.url||fotosBusy||(fotosHecho&&!force))return;fotosBusy=true;
+ try{
+  const j=await cloud('listFotos',{},null,90000),en=new Set(j.names||[]);let n=0,fallos=0;
+  for(const t of S.tanqueos)for(const [tipo,campo] of [['odo','fotoOdo'],['comp','fotoComp']])for(let i=0;i<nFoto(t[campo]);i++){
+   const k=fk(t.id,tipo,i);if(en.has(fnom(k)))continue;
+   let u=null;try{u=await fGet(k)}catch(e){}if(!u)continue;
+   if(await fCloudPut(k,u))n++;else fallos++}
+  fotosHecho=!fallos;
+  if(n)toast(n+' foto(s) subida(s) a Google Drive');
+  if(fallos)toast('No se pudieron subir '+fallos+' foto(s) a Drive; se reintentará')}
+ catch(e){if(/no soportada|unsupported/i.test(e.message||''))toast('Para ver las fotos en otros equipos, reemplace Code.gs (Configuración → Descargar Code.gs) y publique una nueva versión')}
+ fotosBusy=false}
+window.addEventListener('online',()=>syncFotos(true));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)autoRefresh()});window.addEventListener('online',()=>{if(CL.url&&pulled&&localStorage.getItem(DK))schedPush();else autoRefresh()});setInterval(autoRefresh,120000);
 /* ---------- Diagnóstico de conexión con Apps Script y Google Sheets ---------- */
 const DX_RE=/^https:\/\/script\.google\.com\/(?:macros\/|a\/macros\/[^\/]+\/|a\/[^\/]+\/macros\/)s\/[A-Za-z0-9_-]{20,}\/exec$/;
@@ -2932,6 +2966,18 @@ function doPost(e) {
       case 'uploadFile':
         return out_(uploadFile_(req));
 
+      case 'putFoto':
+        return out_(putFoto_(req));
+
+      case 'getFoto':
+        return out_(getFoto_(req));
+
+      case 'delFoto':
+        return out_(delFoto_(req));
+
+      case 'listFotos':
+        return out_(listFotos_());
+
       case 'sendEmail':
         return out_(sendEmail_(req));
 
@@ -3195,6 +3241,72 @@ function uploadFile_(req) {
     url: archivo.getUrl(),
     id: archivo.getId()
   };
+}
+
+/* ========================= FOTOS EN DRIVE (odómetro y comprobantes) =========================
+ * Las fotos se guardan en la carpeta «IGC Fuel Control - Fotos» del Drive de
+ * quien publicó el script (privada; solo se leen a través de este script y
+ * con el APP_TOKEN). Así se ven desde cualquier computador o celular.
+ */
+
+function fotosFolder_() {
+  return folder_('DRIVE_FOTOS_ID', 'IGC Fuel Control - Fotos');
+}
+
+function fotoNombre_(n) {
+  n = String(n || '').replace(/[^A-Za-z0-9_.-]/g, '_');
+  if (!n) {
+    throw new Error('Nombre de foto vacío');
+  }
+  return n;
+}
+
+function putFoto_(req) {
+  if (!req.b64) {
+    throw new Error('Foto vacía');
+  }
+  const nombre = fotoNombre_(req.name);
+  const carpeta = fotosFolder_();
+  const it = carpeta.getFilesByName(nombre);
+  while (it.hasNext()) {
+    it.next().setTrashed(true);
+  }
+  carpeta.createFile(
+    Utilities.newBlob(Utilities.base64Decode(req.b64), 'image/jpeg', nombre)
+  );
+  return { ok: true, name: nombre };
+}
+
+function getFoto_(req) {
+  const it = fotosFolder_().getFilesByName(fotoNombre_(req.name));
+  if (!it.hasNext()) {
+    return { ok: true, b64: '', mime: '' };
+  }
+  const blob = it.next().getBlob();
+  return {
+    ok: true,
+    b64: Utilities.base64Encode(blob.getBytes()),
+    mime: blob.getContentType() || 'image/jpeg'
+  };
+}
+
+function delFoto_(req) {
+  const it = fotosFolder_().getFilesByName(fotoNombre_(req.name));
+  let n = 0;
+  while (it.hasNext()) {
+    it.next().setTrashed(true);
+    n++;
+  }
+  return { ok: true, deleted: n };
+}
+
+function listFotos_() {
+  const it = fotosFolder_().getFiles();
+  const names = [];
+  while (it.hasNext()) {
+    names.push(it.next().getName());
+  }
+  return { ok: true, names: names };
 }
 
 /* ========================= CORREO AUTOMÁTICO (COMBUSTIBLE BAJO) ========================= */
