@@ -517,7 +517,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <div><label>Factura vs tanqueo: tolerancia de valor (%)</label><input type="number" id="c-tfv" min="0" step="0.5"></div>
       <div><label>Retención en la fuente por defecto (%) — compra de combustible</label><input type="number" id="c-rfp" min="0" step="0.05"></div>
     </div>
-    <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="cl-dx" type="button">🩺 Diagnosticar conexión</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button><button class="btn sec" id="pdf-todo" type="button">⬇ Exportar TODO a PDF</button></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="cl-ok" type="button">Guardar y conectar</button><button class="btn sec" id="cl-up" type="button">Subir todo a Sheets</button><button class="btn sec" id="cl-down" type="button">Descargar de Sheets</button><button class="btn sec" id="cl-dx" type="button">🩺 Diagnosticar conexión</button><button class="btn sec" id="cl-fotos" type="button">📷 Fotos: revisar y subir a Drive</button><button class="btn sec" id="xl-todo" type="button">⬇ Exportar TODO a Excel</button><button class="btn sec" id="pdf-todo" type="button">⬇ Exportar TODO a PDF</button></div>
     <h3 style="margin-top:16px">Archivo con conexión incluida (para todos los dispositivos)</h3>
     <p class="muted small" style="margin-top:0"><b>Hágalo una sola vez</b> en el equipo ya conectado: pulse «Generar copia con conexión incluida» y use el archivo descargado en todos los dispositivos. Al abrirlo se conecta y descarga todo de Google Sheets sin pedir configuración. El archivo contiene el token de acceso: no lo publique en un sitio abierto. Si cambia la URL o el token, genere la copia de nuevo.</p>
     <div class="row"><button class="btn" id="cl-gen" type="button">⬇ Generar copia con conexión incluida</button></div>
@@ -1161,9 +1161,10 @@ async function verFoto(k){
   if(!CL.url)vacio+=' Este navegador no está conectado a Google Sheets/Drive: use la copia con conexión incluida (Configuración).';
   else if(/no soportada|unsupported/i.test(fotoErr))vacio+=' El Apps Script aún no tiene la función de fotos: reemplace Code.gs (Configuración → «Descargar Code.gs»), ejecute cualquier función una vez para autorizar Drive y publique una <b>Nueva versión</b>.';
   else if(fotoErr)vacio+=' No se pudo consultar Drive: '+esc(fotoErr);
-  else vacio+=' Si se tomó en otro equipo, ábralo allí una vez con conexión para que se suba a Google Drive.';
+  else vacio+=' Esta foto no está en Google Drive ni en este navegador: solo existe en el equipo o dirección donde se cargó. Ábralo allí y pulse «Revisar y subir fotos a Drive».';
   $('#dlg-body').innerHTML=`<h3 style="margin-top:0">${tit}${urls.length>1?' ('+urls.length+')':''}</h3>${info}
-    ${urls.length?urls.map((u,i)=>`<img src="${u}" alt="Foto ${i+1}" style="margin-bottom:8px">`).join(''):'<p class="muted">'+vacio+'</p>'}`;
+    ${urls.length?urls.map((u,i)=>`<img src="${u}" alt="Foto ${i+1}" style="margin-bottom:8px">`).join(''):'<p class="muted">'+vacio+'</p><div class="row"><button class="btn sec sm" id="dlg-fdx" type="button">📷 Revisar y subir fotos a Drive</button></div>'}`;
+  const bx=$('#dlg-fdx');if(bx)bx.onclick=fotosDiag;
 }
 function limpiarFormTanqueo(){
   editing=null;pend=nuevoPend();$('#f-tanqueo').reset();$('#t-full').checked=true;
@@ -1794,6 +1795,29 @@ async function syncFotos(force){
  catch(e){if(/no soportada|unsupported/i.test(e.message||''))toast('Para ver las fotos en otros equipos, reemplace Code.gs (Configuración → Descargar Code.gs) y publique una nueva versión')}
  fotosBusy=false}
 window.addEventListener('online',()=>syncFotos(true));
+async function fotosDiag(){
+ const body=$('#dlg-body'),dlg=$('#dlg');
+ const cab='<h3 style="margin-top:0">Fotos en Google Drive</h3>';
+ body.innerHTML=cab+'<p class="muted">Revisando fotos y subiendo las que faltan…</p>';if(!dlg.open)dlg.showModal();
+ const donde=location.protocol==='file:'?'archivo guardado en este equipo (file://)':location.host;
+ if(!CL.url){body.innerHTML=cab+'<p>Este navegador no está conectado a Google Sheets/Drive. Use la copia con conexión incluida o conéctelo en Configuración.</p>';return}
+ let names;fotoErr='';
+ try{names=new Set((await cloud('listFotos',{},null,90000)).names||[])}
+ catch(e){const m=e.message||String(e);body.innerHTML=cab+'<p><b>No se pudo consultar Drive:</b> '+esc(m)+'</p>'+(/no soportada|unsupported/i.test(m)?'<p>El Apps Script publicado no tiene la función de fotos: reemplace Code.gs y publique una <b>Nueva versión</b>.</p>':'<p>Use «Diagnosticar conexión» en Configuración.</p>');return}
+ let total=0,local=0,enDrive=0,subidas=0,fallos=0;const perdidas=[];
+ for(const t of S.tanqueos)for(const [tipo,campo,eti] of [['odo','fotoOdo','odómetro'],['comp','fotoComp','comprobante']])for(let i=0;i<nFoto(t[campo]);i++){
+  total++;const k=fk(t.id,tipo,i);let ok=names.has(fnom(k)),u=null;
+  try{u=await fGet(k)}catch(e){}
+  if(u)local++;
+  if(u&&!ok){if(await fCloudPut(k,u)){subidas++;ok=true}else fallos++}
+  if(ok)enDrive++;
+  if(!u&&!ok)perdidas.push(esc(t.placa)+' · '+fd(t.fecha)+' '+esc(t.hora||'')+' · '+eti+' '+(i+1))}
+ fotosHecho=!fallos&&!perdidas.length?true:fotosHecho;
+ let h=cab+'<p class="small">Página abierta desde: <b>'+esc(donde)+'</b></p><table style="width:100%"><tr><td>Fotos registradas en los tanqueos</td><td class="n"><b>'+total+'</b></td></tr><tr><td>Guardadas en este navegador</td><td class="n"><b>'+local+'</b></td></tr><tr><td>Subidas ahora a Drive</td><td class="n"><b>'+subidas+'</b></td></tr><tr><td>Ya disponibles en Drive (visibles en cualquier equipo)</td><td class="n"><b>'+enDrive+'</b></td></tr><tr><td>Sin copia en ningún lado</td><td class="n"><b>'+perdidas.length+'</b></td></tr></table>';
+ if(fallos)h+='<p>⚠ '+fallos+' foto(s) no se pudieron subir: '+esc(fotoErr||'error de red')+'. Intente de nuevo con mejor señal.</p>';
+ if(perdidas.length)h+='<p><b>Estas fotos no están en Drive ni en este navegador</b>, es decir, solo existen en otro navegador o dirección donde se cargaron:</p><ul class="small">'+perdidas.slice(0,40).map(x=>'<li>'+x+'</li>').join('')+(perdidas.length>40?'<li>… y '+(perdidas.length-40)+' más</li>':'')+'</ul><p class="small">Para recuperarlas: abra este mismo archivo HTML en el equipo y <b>de la misma forma</b> (misma dirección o mismo archivo) en que las cargó originalmente y pulse aquí «📷 Fotos: revisar y subir a Drive». Si ese navegador ya no existe o se borraron sus datos, esas fotos no se pueden recuperar y habría que volver a cargarlas con «Editar».</p>';
+ else if(total)h+='<p>✅ Todas las fotos están en Drive. Ya se pueden ver desde cualquier equipo.</p>';
+ body.innerHTML=h}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)autoRefresh()});window.addEventListener('online',()=>{if(CL.url&&pulled&&localStorage.getItem(DK))schedPush();else autoRefresh()});setInterval(autoRefresh,120000);
 /* ---------- Diagnóstico de conexión con Apps Script y Google Sheets ---------- */
 const DX_RE=/^https:\/\/script\.google\.com\/(?:macros\/|a\/macros\/[^\/]+\/|a\/[^\/]+\/macros\/)s\/[A-Za-z0-9_-]{20,}\/exec$/;
@@ -2785,6 +2809,7 @@ $('#v-ruta').onchange=()=>rutaCambio(false);
 ['#v-kmruta','#v-placa','#v-nv'].forEach(s=>$(s).addEventListener('input',liveViaje));
 $('#v-cancelar').onclick=()=>{editingV=null;$('#f-viaje').reset();$('#v-cancelar').hidden=true;rutaCambio(true)};
 $('#dlg-x').onclick=()=>$('#dlg').close();
+{const b=$('#cl-fotos');if(b)b.onclick=fotosDiag}
 $('#sat-btn').onclick=()=>$('#sat-file').click();
 $('#sat-file').onchange=e=>{const f=e.target.files[0];if(f)satArchivo(f);e.target.value=''};
 $('#sat-placa').onchange=renderSatrack;
