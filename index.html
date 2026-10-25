@@ -117,6 +117,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
 </header>
 <main>
 <div id="aviso-comb"></div>
+<div id="proy-comb"></div>
 
 <!-- ============ CONCILIACIÓN ============ -->
 <section id="tab-resumen" class="on">
@@ -910,6 +911,7 @@ function alertas(per,modo){
   });
   alertasRuta(per).forEach(x=>L.push({n:x.n,key:x.key,t:x.t+' Factores: '+x.fac.join('; ')+'.'}));
   nivelesComb().filter(n=>n.bajo).forEach(n=>L.push({n:n.crit?'crit':'warn',key:'nivel|'+n.placa,t:n.placa+' · Combustible bajo: ~'+fmt(n.nivel,0)+' gal estimados en el tanque (mínimo '+fmt(n.min,0)+'). Debe tanquear hoy'+(n.cond?' (conductor '+n.cond+')':'')+'.'}));
+  try{proyecciones().filter(p=>!p.ya&&p.sev==='warn').forEach(p=>L.push({n:'warn',key:'proy|'+p.placa,t:p.placa+' · Proyección de tanque: ~'+fmt(p.nivelHoy,0)+' gal hoy, promedio '+fmt(p.prom,1)+' gal/día; llegará al mínimo ('+fmt(p.min,0)+' gal) el '+fd(dIso(p.fMin))+'. Programe el tanqueo.'}))}catch(e){}
   const ord={err:0,crit:1,warn:2};
   return L.sort((a,b)=>ord[a.n]-ord[b.n]);
 }
@@ -1062,7 +1064,7 @@ function detalleHTML(p){
     </table></div>
     <p class="muted small">Esperado = km × estándar${p.ralPosible?' (+ horas de ralentí × '+fmt(v.ralenti,2)+' gal/h en el escenario D)':''}; en el escenario C se usa el galonaje aproximado de las rutas por vehículo. ${p.ralentiH==null?'Escenario D no disponible: falta registrar horas de ralentí. ':''}${(p.ralentiH!=null&&v.ralenti==null)?'Escenario D no disponible: falta el consumo de ralentí (gal/h) del vehículo. ':''}Modo de fuente: ${esc({comparativo:'comparativo',odometro:'odómetro',satrack:'Satrack',automatico:'automático'}[cfg.fuente])}.</p>
 
-    ${p.viajes.length||p.ralentiH!=null?`<h3>Viajes y remisiones del período</h3>${p.viajes.length?tablaViajes(p.viajes):''}${bloqueRalenti(p)}`:''}
+    ${p.viajes.length||p.ralentiH!=null?`<h3>Viajes y remisiones del período</h3>${p.viajes.length?tablaViajes(p.viajes,false,p):''}${bloqueRalenti(p)}`:''}
 
     <h3>Calidad del dato</h3>
     <div class="row">${p.fuentes.map(f=>`<span class="chip ${f[1]?'ok':'na'}">${f[1]?'✔':'✖'} ${f[0]}</span>`).join('')}</div>
@@ -1080,22 +1082,43 @@ function bloqueRalenti(p){
     <tr class="tot"><td><b>${esc(p.placa)}</b></td><td class="n">${fmt(p.ralentiH,1)} h</td><td class="n">${cr==null?'—':fmt(cr,2)}</td><td class="n">${gal==null?'—':fmt(gal,1)+' gal'}</td><td class="n">${gal!=null&&p.gal>0?fmt(gal/p.gal*100,1)+' %':'—'}</td></tr></table></div>
     ${cr==null?'<p class="muted small">Falta el consumo de ralentí (gal/h) del vehículo en Configuración para calcular los galones.</p>':'<p class="muted small">Galones en ralentí = horas de ralentí del período × consumo de ralentí (gal/h) del vehículo en Configuración.</p>'}`;
 }
-function tablaViajes(vs,acciones){
+function tablaViajes(vs,acciones,ctx){
   /* Conciliación (sin acciones): una fila por día y vehículo. Los km de Satrack y de odómetro NO se toman del registro del viaje sino de la
      sección Viajes → «Rutas realizadas por día y vehículo»: «Km Satrack (informe diario)» y «Km preop. (posterior − inicial)».
      Galones estimados = esos km × estándar (gal/km) del vehículo en Configuración. */
   if(!acciones){
-    const C=new Map(crucePorDia().map(r=>[r.fecha+'|'+r.placa,r])),g={};
+    const C=new Map(crucePorDia().map(r=>[r.fecha+'|'+r.placa,r])),RD=new Map(rendDiario().map(r=>[r.fecha+'|'+r.placa,r])),tc=S.config.tolConsumo,g={};
     vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;(g[k]=g[k]||[]).push(v)});
-    return `<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th>Rutas y remisiones</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Km Satrack<div class="small muted">informe diario</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km)</div></th><th class="n">Km preop.<div class="small muted">posterior − inicial</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km preop. × estándar (gal/km)</div></th></tr>`+
-    (()=>{const T={n:0,km:0,gv:0,kS:0,gS:0,kP:0,gO:0,hS:false,hP:false,parc:false};T.rows=Object.keys(g).sort().map(k=>{const a=g[k],[f,pl]=k.split('|'),r=C.get(k)||{},std=vehiculo(pl).std,gv=a.reduce((x,v)=>x+galViaje(v),0),
+    const T={n:0,km:0,gv:0,kS:0,gS:0,kP:0,gO:0,hS:false,hP:false,parc:false,al:0,lista:[]};
+    const rows=Object.keys(g).sort().map(k=>{const a=g[k],[f,pl]=k.split('|'),r=C.get(k)||{},std=vehiculo(pl).std,gv=a.reduce((x,v)=>x+galViaje(v),0),
       kmS=r.kmSat==null?null:r.kmSat,kmP=r.kmPre==null?null:r.kmPre,gS=kmS!=null?kmS*std:null,gO=kmP!=null&&kmP>=0?kmP*std:null,
       parcial=r.vs&&a.length<r.vs.length;
       T.n+=a.reduce((x,v)=>x+nV(v),0);T.km+=a.reduce((x,v)=>x+kmViaje(v),0);T.gv+=gv;if(kmS!=null){T.kS+=kmS;T.gS+=gS;T.hS=true}if(kmP!=null&&kmP>=0){T.kP+=kmP;T.gO+=gO;T.hP=true}if(parcial)T.parc=true;
-      const 
-cel=(g2,cmp)=>g2==null?'—':`<b>${fmt(g2,1)} gal</b>${cmp&&gv>0?'<div class="small muted">'+sgal(g2-gv)+' vs ruta</div>':''}`;
-      return `<tr><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}${parcial?'<div class="small muted">Los km diarios son del día completo (hay viajes del día en otro período)</div>':''}</td><td class="n">${a.reduce((x,v)=>x+nV(v),0)}</td><td class="n">${fmt(a.reduce((x,v)=>x+kmViaje(v),0),1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${kmS==null?'—':fmt(kmS,1)}</td><td class="n">${cel(gS,!parcial)}</td><td class="n">${kmP==null?'—':fmt(kmP)}${kmP!=null&&kmP<0?' <span class="bad">⚠</span>':''}${r.gap>1?'<div class="small muted">'+r.gap+' días hasta la siguiente medición</div>':''}</td><td class="n">${cel(gO,!parcial&&!(r.gap>1))}</td></tr>`});
-      return T.rows.join('')+`<tr class="tot"><td colspan="3"><b>TOTAL DEL PERÍODO</b></td><td class="n">${T.n}</td><td class="n">${fmt(T.km,1)}</td><td class="n">${fmt(T.gv,1)}</td><td class="n">${T.hS?fmt(T.kS,1):'—'}</td><td class="n">${T.hS?fmt(T.gS,1)+' gal':'—'}</td><td class="n">${T.hP?fmt(T.kP):'—'}</td><td class="n">${T.hP?fmt(T.gO,1)+' gal':'—'}</td></tr></table></div>`+(T.parc?'<p class="muted small">El total incluye los km diarios de días completos que se reparten entre dos períodos.</p>':'');})();
+      /* Alerta de mayor consumo: consumo estimado del día (km reales × estándar + ralentí del día) frente a los galones esperados según la ruta */
+      const rd=RD.get(k)||{},ralG=rd.ralG||0,cand=[];
+      if(gS!=null&&!parcial)cand.push({f:'Satrack',g:gS+ralG,km:kmS});
+      if(gO!=null&&!parcial&&!(r.gap>1))cand.push({f:'odómetro',g:gO+ralG,km:kmP});
+      let al=null;
+      if(gv>0&&cand.length){const m=[...cand].sort((x,y)=>y.g-x.g)[0],dif=m.g-gv,pct=dif/gv*100;
+        if(pct>tc){const kmR=a.reduce((x,v)=>x+kmViaje(v),0),causas=[];
+          if(kmR>0&&m.km>kmR*(1+tc/100))causas.push('recorrió '+fmt(m.km-kmR,1)+' km más que los km de la ruta');
+          if(ralG>0)causas.push('ralentí '+fmt(rd.ralH,1)+' h ≈ '+fmt(ralG,1)+' gal');
+          al={n:pct>tc*2?'crit':'warn',f:m.f,dif,pct,causas};T.al++;T.lista.push(fd(f)+' '+pl+' ('+sgal(dif)+', '+sg(pct)+')')}}
+      const cel=(g2,cmp)=>g2==null?'—':`<b>${fmt(g2,1)} gal</b>${cmp&&gv>0?'<div class="small muted">'+sgal(g2-gv)+' vs ruta</div>':''}`;
+      const celAl=al?chip(al.n,'Mayor consumo')+`<div class="small">${sgal(al.dif)} (${sg(al.pct)}) según ${al.f}</div>${al.causas.length?'<div class="small muted">'+esc(al.causas.join(' · '))+'</div>':''}`:(cand.length&&gv>0?'<span class="muted small">Normal</span>':'<span class="muted small">Sin datos para comparar</span>');
+      return `<tr${al?' style="background:var(--'+(al.n==='crit'?'badbg':'warnbg')+')"':''}><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}${parcial?'<div class="small muted">Los km diarios son del día completo (hay viajes del día en otro período)</div>':''}</td><td class="n">${a.reduce((x,v)=>x+nV(v),0)}</td><td class="n">${fmt(a.reduce((x,v)=>x+kmViaje(v),0),1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${kmS==null?'—':fmt(kmS,1)}</td><td class="n">${cel(gS,!parcial)}</td><td class="n">${kmP==null?'—':fmt(kmP)}${kmP!=null&&kmP<0?' <span class="bad">⚠</span>':''}${r.gap>1?'<div class="small muted">'+r.gap+' días hasta la siguiente medición</div>':''}</td><td class="n">${cel(gO,!parcial&&!(r.gap>1))}</td><td>${celAl}</td></tr>`});
+    const nDias=rows.length,pr=ctx&&ctx.gal>0?ctx:null;
+    let cmpRows='';
+    if(pr){
+      const tq=pr.gal,nTq=pr.seg.filter(r=>r.gal>0).length,ralG=(pr.ralentiH!=null&&pr.veh.ralenti!=null)?pr.ralentiH*pr.veh.ralenti:null;
+      const cd=(est,hay)=>{if(!hay)return '<td class="n">—</td>';const d=est-tq,pc=tq>0?d/tq*100:null,n=pc==null?'na':(Math.abs(pc)>tc*2?'crit':Math.abs(pc)>tc?'warn':'ok');
+        return `<td class="n"><b>${sgal(d)}</b><div class="small muted">${sg(pc)} vs tanqueado</div>${chip(n,n==='ok'?'Coincide':(d>0?'Estimado > tanqueado':'Tanqueado > estimado'))}${ralG!=null?'<div class="small muted">con ralentí (+'+fmt(ralG,1)+' gal): '+sgal(est+ralG-tq)+'</div>':''}</td>`};
+      cmpRows=`<tr class="tot"><td colspan="5"><b>GALONES TANQUEADOS EN EL PERÍODO</b><div class="small muted">${nTq} tanqueo${nTq===1?'':'s'} entre ${fd(pr.A.fecha)} y ${fd(pr.B.fecha)} (de tanque full a tanque full)</div></td><td class="n" colspan="5"><b>${fmt(tq,1)} gal</b></td><td></td></tr>
+      <tr class="tot"><td colspan="5"><b>DIFERENCIA vs TANQUEADO</b><div class="small muted">(total del período − galones tanqueados)</div></td>${cd(T.gv,true)}<td></td>${cd(T.gS,T.hS)}<td></td>${cd(T.gO,T.hP)}<td></td></tr>`;
+    }
+    const banner=T.al?`<div class="banner ${T.lista.length&&rows.length&&T.al>=Math.ceil(nDias/2)?'crit':'warn'}" style="margin:0 0 8px"><b>⚠ Mayor consumo al normal en ${T.al} de ${nDias} día(s) con viaje</b><div class="small">Se alerta cuando el consumo estimado del día (km reales × estándar gal/km + ralentí) supera en más de ${fmt(tc,0)} % los galones esperados según la ruta. ${esc(T.lista.join(' · '))}</div></div>`:'';
+    return banner+`<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th>Rutas y remisiones</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Km Satrack<div class="small muted">informe diario</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km)</div></th><th class="n">Km preop.<div class="small muted">posterior − inicial</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km preop. × estándar (gal/km)</div></th><th>Alerta de consumo<div class="small muted">vs galones de la ruta</div></th></tr>`+
+      rows.join('')+`<tr class="tot"><td colspan="3"><b>TOTAL DEL PERÍODO</b></td><td class="n">${T.n}</td><td class="n">${fmt(T.km,1)}</td><td class="n">${fmt(T.gv,1)}</td><td class="n">${T.hS?fmt(T.kS,1):'—'}</td><td class="n">${T.hS?fmt(T.gS,1)+' gal':'—'}</td><td class="n">${T.hP?fmt(T.kP):'—'}</td><td class="n">${T.hP?fmt(T.gO,1)+' gal':'—'}</td><td class="n">${T.al?T.al+' día(s) con alerta':'—'}</td></tr>`+cmpRows+`</table></div>`+(T.parc?'<p class="muted small">El total incluye los km diarios de días completos que se reparten entre dos períodos.</p>':'')+'';
   }
   return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th><th></th></tr>`+
   vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),std=kmViaje(v);
@@ -1498,6 +1521,61 @@ function nivelComb(pl){
   return{placa:pl,nivel,min,bajo:nivel<=min,crit:nivel<=min/2,ref:a.txt,kmTot,kmOdo,kmSat,ralH,ralG,added,cons,hasta,edad:Math.round((diaIni(Date.now())-diaIni(hasta))/DIA),cond:cands.length?cands[cands.length-1].c:'',aut:nivel>0&&std>0?nivel/std:0,cap};
 }
 const nivelesComb=()=>[...new Set(S.vehiculos.map(v=>v.placa).concat(S.tanqueos.map(t=>t.placa)))].sort().map(nivelComb).filter(Boolean);
+/* ---------- Proyección diaria del nivel del tanque desde el último tanqueo full ---------- */
+function proyeccionComb(pl){
+  const veh=vehiculo(pl),cap=+veh.capacidad||0,std=veh.std||0.15,min=nivMin();
+  const tqs=S.tanqueos.filter(t=>t.placa===pl&&isNum(t.gal)).sort((a,b)=>dtT(a)-dtT(b));
+  const F=[...tqs].reverse().find(t=>t.full);
+  if(!F||!(cap>0))return null;
+  const tF=dtT(F),d0=diaIni(tF),hoy=diaIni(Date.now()),dia1=d0+DIA;
+  const RD=new Map(rendDiario().filter(r=>r.placa===pl).map(r=>[r.fecha,r]));
+  /* lecturas de odómetro después del full: tanqueo = cierre de su día; preoperacional = inicio de su día */
+  let rd=[];if(isNum(F.odo))rd.push({b:dia1,odo:+F.odo});
+  tqs.filter(t=>dtT(t)>tF&&isNum(t.odo)).forEach(t=>rd.push({b:diaIni(dtT(t))+DIA,odo:+t.odo}));
+  S.preop.filter(r=>r.placa===pl&&num(r.km)!=null&&dtP(r)>tF).forEach(r=>rd.push({b:diaIni(dtP(r)),odo:+r.km}));
+  rd.sort((x,y)=>x.b-y.b||x.odo-y.odo);
+  const dd=[];rd.forEach(x=>{if(dd.length&&dd[dd.length-1].b===x.b)dd[dd.length-1]=x;else dd.push(x)});
+  const odoDia=new Map();let ultOdo=null;
+  for(let i=1;i<dd.length;i++){const A=dd[i-1],B=dd[i],n=Math.round((B.b-A.b)/DIA),km=B.odo-A.odo;if(n<1||km<0)continue;
+    const dias=[];for(let k=0;k<n;k++)dias.push(A.b+k*DIA);
+    const w=dias.map(t=>{const r=RD.get(dIso(t));return r&&r.km>0?r.km:0}),sw=w.reduce((x,y)=>x+y,0);
+    dias.forEach((t,k)=>odoDia.set(t,km*(sw>0?w[k]/sw:1/n)));ultOdo=B.b-DIA}
+  const viajesDia=new Map();S.viajes.filter(v=>v.placa===pl&&v.salida).forEach(v=>{const t=diaIni(dtV(v));if(t<dia1)return;const o=viajesDia.get(t)||{n:0,km:0,gal:0};o.n+=nV(v);o.km+=kmViaje(v);o.gal+=galViaje(v);viajesDia.set(t,o)});
+  const tqDia=new Map();tqs.filter(t=>dtT(t)>tF).forEach(t=>{const d=diaIni(dtT(t));tqDia.set(d,(tqDia.get(d)||0)+t.gal)});
+  /* último día con información (Satrack diario, viajes, lecturas de odómetro o tanqueos) */
+  const ult=[...[...RD.values()].filter(r=>r.km>0).map(r=>Date.parse(r.fecha+'T00:00')),...viajesDia.keys(),...(ultOdo!=null?[ultOdo]:[]),...tqDia.keys()].filter(t=>t>=dia1);
+  const hasta=ult.length?Math.min(Math.max(...ult),hoy):null;
+  let nivel=Math.min(cap,cap+(tqDia.get(d0)||0)),totCons=0,totKmSat=0,totKmOdo=0,totViajes=0,totGalRuta=0,totKm=0;const dias=[];
+  if(hasta!=null)for(let t=dia1;t<=hasta;t+=DIA){
+    const r=RD.get(dIso(t))||{},kS=r.km>0?r.km:null,kO=odoDia.has(t)?odoDia.get(t):null,v=viajesDia.get(t)||null,
+      km=kS!=null?kS:(kO!=null?kO:(v?v.km:null)),fu=kS!=null?'Satrack':(kO!=null?'Odómetro':(v?'Km de ruta':'Sin datos')),
+      ralG=r.ralG||0,gal=(km||0)*std+ralG,tq=tqDia.get(t)||0;
+    nivel=Math.max(0,Math.min(cap,nivel+tq-gal));totCons+=gal;totKm+=km||0;totKmSat+=kS||0;totKmOdo+=kO||0;if(v){totViajes+=v.n;totGalRuta+=v.gal}
+    dias.push({t,fecha:dIso(t),v,kS,kO,km,fu,ralG,gal,tq,nivel,bajo:nivel<=min})}
+  const nd=dias.length,prom=nd>0?totCons/nd:null,sinDatos=hasta!=null?Math.max(0,(hoy-hasta)/DIA-1):0;
+  const nivelHoy=nd?Math.max(0,nivel-(prom||0)*sinDatos):cap;
+  const margen=nivelHoy-min,dRest=prom>0?margen/prom:null,
+    fMin=dRest==null?null:hoy+Math.max(0,Math.ceil(dRest)-1)*DIA,
+    ya=nivelHoy<=min;
+  /* proyección de los próximos días con el consumo promedio diario */
+  const futuro=[];if(prom>0){let nv=nivelHoy;for(let k=0;k<14&&nv>0;k++){nv=Math.max(0,nv-prom);const t=hoy+k*DIA;futuro.push({t,fecha:dIso(t),gal:prom,nivel:nv,bajo:nv<=min});if(nv<=min)break}}
+  const cands=[...S.preop.filter(r=>r.placa===pl&&r.conductor).map(r=>({t:dtP(r),c:r.conductor})),...S.viajes.filter(v=>v.placa===pl&&v.conductor).map(v=>({t:dtV(v),c:v.conductor})),...tqs.filter(t=>t.conductor).map(t=>({t:dtT(t),c:t.conductor}))].sort((x,y)=>x.t-y.t);
+  return{placa:pl,cap,min,std,F,dias,futuro,nd,prom,totCons,totKm,totKmSat,totKmOdo,totViajes,totGalRuta,nivelHoy,sinDatos,hasta,dRest,fMin,ya,
+    sev:ya?(nivelHoy<=min/2?'crit':'warn'):(dRest!=null&&dRest<=2?'warn':'ok'),cond:cands.length?cands[cands.length-1].c:'',aut:std>0?Math.max(0,margen)/std:0}
+}
+const proyecciones=()=>[...new Set(S.vehiculos.map(v=>v.placa).concat(S.tanqueos.map(t=>t.placa)))].sort().map(proyeccionComb).filter(Boolean);
+function renderProyComb(){
+  const el=$('#proy-comb');if(!el)return;
+  const P=proyecciones();
+  el.innerHTML=P.map(p=>{
+    const when=p.ya?'<b>debe tanquear hoy</b>':(p.fMin!=null?'llegará al mínimo de '+fmt(p.min,0)+' gal el <b>'+fd(dIso(p.fMin))+'</b>'+(p.fMin===diaIni(Date.now())?' (hoy)':' (en ~'+fmt(Math.max(1,Math.ceil(p.dRest)),0)+' día(s))')+' → <b>tanquear a más tardar ese día</b>':'sin consumo registrado desde el full');
+    const tabla=`<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th class="n">Viajes<div class="small muted">remisiones · gal ruta</div></th><th class="n">Km Satrack</th><th class="n">Km odómetro<div class="small muted">repartido por día</div></th><th class="n">Km usado</th><th class="n">Gal. ralentí</th><th class="n">Gal. consumidos<div class="small muted">km × ${fmt(p.std,3)} + ralentí</div></th><th class="n">Tanqueado</th><th class="n">Nivel fin de día (gal)</th><th>Estado</th></tr>`+
+      p.dias.map(d=>`<tr><td>${fd(d.fecha)}</td><td class="n">${d.v?d.v.n+' · '+fmt(d.v.gal,1):'—'}</td><td class="n">${d.kS==null?'—':fmt(d.kS,1)}</td><td class="n">${d.kO==null?'—':fmt(d.kO,1)}</td><td class="n">${d.km==null?'—':fmt(d.km,1)}<div class="small muted">${d.fu}</div></td><td class="n">${d.ralG>0?fmt(d.ralG,1):'—'}</td><td class="n">${fmt(d.gal,1)}</td><td class="n">${d.tq>0?fmt(d.tq,1):'—'}</td><td class="n"><b>${fmt(d.nivel,0)}</b></td><td>${d.bajo?chip('warn','≤ mínimo'):chip('ok','OK')}</td></tr>`).join('')+
+      p.futuro.map(d=>`<tr class="muted"><td>${fd(d.fecha)}<div class="small">proyectado</div></td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">${fmt(d.gal,1)}</td><td class="n">—</td><td class="n"><b>${fmt(d.nivel,0)}</b></td><td>${d.bajo?chip(p.ya?'crit':'warn','Tanquear'):chip('ok','OK')}</td></tr>`).join('')+
+      `<tr class="tot"><td><b>TOTAL</b></td><td class="n">${p.totViajes} · ${fmt(p.totGalRuta,1)}</td><td class="n">${fmt(p.totKmSat,1)}</td><td class="n">${fmt(p.totKmOdo,1)}</td><td class="n">${fmt(p.totKm,1)}</td><td></td><td class="n"><b>${fmt(p.totCons,1)}</b></td><td></td><td></td><td></td></tr></table></div>`;
+    return `<div class="banner ${p.sev}" style="margin:8px 0"><b>⛽ Proyección de tanque · ${esc(p.placa)}</b>: último tanque full (${fmt(p.cap,0)} gal) el ${fd(p.F.fecha)}${p.F.hora?' '+esc(p.F.hora):''}${isNum(p.F.odo)?' · odómetro '+fmt(p.F.odo,0)+' km':''}. ${p.nd?`Desde entonces (${p.nd} día${p.nd===1?'':'s'} con datos hasta el ${fd(dIso(p.hasta))}): ${fmt(p.totKm,0)} km (Satrack ${fmt(p.totKmSat,0)} + odómetro ${fmt(p.totKmOdo,0)}), ${p.totViajes} viaje(s), ${fmt(p.totCons,0)} gal consumidos, promedio <b>${fmt(p.prom,1)} gal/día</b>. Nivel estimado hoy: <b>~${fmt(p.nivelHoy,0)} gal</b>${p.sinDatos>0?' <span class="small">(incluye '+fmt(p.sinDatos,0)+' día(s) sin datos al promedio)</span>':''}; ${when}${p.cond&&(p.ya||p.sev==='warn')?' · conductor <b>'+esc(p.cond)+'</b>':''}. Autonomía hasta el mínimo ≈ ${fmt(p.aut,0)} km.`:'Aún no hay km, viajes ni tanqueos posteriores al full para estimar el consumo.'}
+      ${p.nd?`<details style="margin-top:6px"><summary class="small">Ver nivel estimado día a día</summary>${tabla}<p class="muted small">Km usado = Satrack del día; si no hay, odómetro (tanqueos/preoperacional repartido entre los días de cada intervalo); si no, km de la ruta de los viajes. Consumo = km × estándar (gal/km) + ralentí × gal/h. Los días «proyectados» usan el promedio diario. Estimación: confírmela con la regla del tanque.</p></details>`:''}</div>`}).join('');
+}
 const msgNivel=n=>'Aviso de combustible: '+(n.cond?n.cond+', ':'')+'el vehículo '+n.placa+' tiene aproximadamente '+fmt(n.nivel,0)+' galones en el tanque (mínimo configurado: '+fmt(n.min,0)+'). Debe tanquear hoy.';
 const mailTo=()=>S.config.emailAvisos||'igcfuel@gmail.com';
 function correoNivel(n,prueba){
@@ -1519,6 +1597,7 @@ function chequearCorreoNivel(N){
 }
 const estadoCorreo=n=>{const c=S.config,hoy=hoyCO();if(c.emailAuto===false)return'Correo automático desactivado';if(c.avisoCorreo&&c.avisoCorreo[n.placa]===hoy)return'📧 Correo enviado hoy a '+mailTo();if(!CL.url)return'Sin Apps Script configurado: no se envió correo automático';if((window._nvErr||{})[n.placa])return'⚠ No se pudo enviar el correo: '+window._nvErr[n.placa];return'📧 Enviando correo a '+mailTo()+'…'};
 function renderNivelComb(){
+  try{renderProyComb()}catch(e){console.error('Proyección de combustible',e)}
   const N=nivelesComb(),bajos=N.filter(n=>n.bajo),av=$('#aviso-comb'),t=$('#tbl-nivel');chequearCorreoNivel(N);
   if(av)av.innerHTML=bajos.map(n=>`<div class="banner ${n.crit?'crit':'warn'}" style="margin:8px 0"><b>⛽ Combustible bajo · ${esc(n.placa)}</b>: ~${fmt(n.nivel,0)} gal en el tanque (mínimo ${fmt(n.min,0)})${n.cond?' · conductor <b>'+esc(n.cond)+'</b>':''} → <b>debe tanquear hoy</b>. <span class="small">Estimado con datos hasta ${fd(dIso(n.hasta))}${n.edad>1?' (hace '+n.edad+' días)':''}. ${esc(estadoCorreo(n))}</span> <a class="btn sec sm" href="mailto:${esc(mailTo())}?subject=${encodeURIComponent(correoNivel(n).subject)}&body=${encodeURIComponent(correoNivel(n).body)}">Enviar con mi correo</a> <button class="btn sec sm" type="button" data-nv="copy" data-p="${esc(n.placa)}">Copiar mensaje</button> <button class="btn sec sm" type="button" data-nv="wa" data-p="${esc(n.placa)}">WhatsApp</button></div>`).join('');
   if(t)t.innerHTML=N.length?'<tr><th>Vehículo</th><th>Conductor</th><th>Referencia</th><th class="n">Km desde la referencia</th><th class="n">Ralentí (h)</th><th class="n">Tanqueado después (gal)</th><th class="n">Consumo estimado (gal)</th><th class="n">Nivel estimado (gal)</th><th class="n">Autonomía aprox. (km)</th><th>Estado</th><th></th></tr>'+
