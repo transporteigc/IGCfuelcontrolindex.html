@@ -447,6 +447,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <div><label>Tolerancia de consumo vs estándar (%)</label><input type="number" id="c-tolcons" min="0" step="0.5"></div>
       <div><label>Preoperacional vs viajes: margen de error (%)</label><input type="number" id="c-tpre" min="0" step="0.5"></div>
       <div><label>Alerta por rutas repetidas: variación de galones (%)</label><input type="number" id="c-tolrep" min="0" step="0.5"></div>
+      <div><label>Alerta de sobreconsumo por día: exceso sobre los galones de la ruta (%) (100 % ≈ el doble)</label><input type="number" id="c-tolsobre" min="1" step="5"></div>
       <div><label>Aviso de combustible bajo: galones mínimos en el tanque (avisa con ese valor o menos)</label><input type="number" id="c-nivmin" min="0" step="1"></div>
       <div><label>Correo para los avisos de combustible bajo</label><input type="email" id="c-nivmail" placeholder="igcfuel@gmail.com"></div>
       <div><label>Envío automático de correo</label><select id="c-nivmailon"><option value="1">Activado</option><option value="0">Desactivado</option></select></div>
@@ -601,7 +602,7 @@ const BASES={odo:'Odómetro',sat:'Satrack',ruta:'Rutas estándar'};
 
 /* ===================== Estado ===================== */
 const LS='igc_km_modulo_v1';
-const defaults=()=>({config:{tolPct:10,critFactor:2,fuente:'comparativo',saltoFactor:4,saltoMin:2,tolConsumo:10,tolRepeticion:10,baseKm:'odo',tolPreop:12,tolFacPct:2,tolFacDias:1,tolFacValor:5,rfPct:0.1},vehiculos:[],conductores:[],rutas:[],tanqueos:[],viajes:[],satrack:[],satLotes:[],facturas:[],preop:[]});
+const defaults=()=>({config:{tolPct:10,critFactor:2,fuente:'comparativo',saltoFactor:4,saltoMin:2,tolConsumo:10,tolSobre:80,tolRepeticion:10,baseKm:'odo',tolPreop:12,tolFacPct:2,tolFacDias:1,tolFacValor:5,rfPct:0.1},vehiculos:[],conductores:[],rutas:[],tanqueos:[],viajes:[],satrack:[],satLotes:[],facturas:[],preop:[]});
 function normState(o){
   const d=defaults(),s={config:Object.assign(d.config,(o&&o.config)||{})};
   ['vehiculos','conductores','rutas','tanqueos','viajes','satrack','satLotes','facturas','preop'].forEach(k=>s[k]=Array.isArray(o&&o[k])?o[k]:[]);
@@ -912,6 +913,7 @@ function alertas(per,modo){
   alertasRuta(per).forEach(x=>L.push({n:x.n,key:x.key,t:x.t+' Factores: '+x.fac.join('; ')+'.'}));
   nivelesComb().filter(n=>n.bajo).forEach(n=>L.push({n:n.crit?'crit':'warn',key:'nivel|'+n.placa,t:n.placa+' · Combustible bajo: ~'+fmt(n.nivel,0)+' gal estimados en el tanque (mínimo '+fmt(n.min,0)+'). Debe tanquear hoy'+(n.cond?' (conductor '+n.cond+')':'')+'.'}));
   try{proyecciones().filter(p=>!p.ya&&p.sev==='warn').forEach(p=>L.push({n:'warn',key:'proy|'+p.placa,t:p.placa+' · Proyección de tanque: ~'+fmt(p.nivelHoy,0)+' gal hoy, promedio '+fmt(p.prom,1)+' gal/día; llegará al mínimo ('+fmt(p.min,0)+' gal) el '+fd(dIso(p.fMin))+'. Programe el tanqueo.'}))}catch(e){}
+  try{sobreconsumos(60).filter(x=>!x.obs).forEach(x=>L.push({n:x.al.n,key:'cons|'+x.key,t:x.placa+' · '+fd(x.fecha)+' · Sobreconsumo: '+sgal(x.al.dif)+' ('+sg(x.al.pct)+') frente a los galones de la ruta. Agregue una observación en Conciliación para justificarlo.'}))}catch(e){}
   const ord={err:0,crit:1,warn:2};
   return L.sort((a,b)=>ord[a.n]-ord[b.n]);
 }
@@ -968,7 +970,7 @@ function renderResumen(){
       const rep=p.rep?(p.rep.alerta?chip(Math.abs(p.rep.pct)>S.config.tolRepeticion*2?'crit':'warn',(p.rep.dif>0?'+':'−')+fmt(Math.abs(p.rep.pct),0)+' % galones'):chip('ok','Similar')):'<span class="muted">—</span>';
       return `<tr class="click ${k===selKey?'sel':''}" data-k="${esc(k)}"><td><b>${esc(p.placa)}</b></td><td>${fd(p.A.fecha)} – ${fd(p.B.fecha)}</td><td class="n">${fmt(p.kmOdo)}</td><td class="n">${fmt(p.kmSat)}</td><td class="n">${p.difPct==null?'—':fmt(p.difPct,1)+' %'}</td><td class="n">${p.nViajes}</td><td class="n">${money(p.costo)}</td><td class="n">${(()=>{const k=kmBase(p,S.config.baseKm);if(!k)return '—';const e=k*p.veh.std;return sgal(p.gal-e)+' <span class="muted small">('+sg((p.gal-e)/e*100)+')</span>'})()}</td>${(()=>{const c=consTotal(p,S.config.baseKm);return `<td class="n">${p.ralentiH==null?'—':fmt(p.ralentiH,1)+' h'}</td><td class="n">${c&&c.gr!=null?fmt(c.gr,1)+' gal':'—'}</td><td class="n">${c?fmt(c.tot,1)+' gal<div class="small muted">'+fmt(c.rod,1)+' + '+(c.gr!=null?fmt(c.gr,1):'0 (sin ralentí)')+'</div>':'—'}</td><td class="n">${c?(c.pct==null?sgal(c.dif):chip(nivKm(c.pct,S.config.tolConsumo),sgal(c.dif)+' ('+sg(c.pct)+')')):'—'}</td>`})()}<td>${chip(p.estado.n,p.estado.t)}</td><td>${rep}</td><td>${chip(p.calidad.n,p.calidad.t)}</td></tr>`}).join(''):'';
   t.querySelectorAll('tr.click').forEach(tr=>tr.onclick=()=>{selKey=tr.dataset.k;renderResumen();$('#detalle').scrollIntoView({behavior:'smooth'})});
-  renderAlertasRuta(per);
+  renderAlertasRuta(per);avisarSobreconsumo();
   const p=per.find(x=>x.placa+'|'+x.B.id===selKey)||per[0];
   if(p&&!per.find(x=>x.placa+'|'+x.B.id===selKey))selKey=p.placa+'|'+p.B.id;
   $('#detalle').innerHTML=p?detalleHTML(p):'';
@@ -1082,6 +1084,45 @@ function bloqueRalenti(p){
     <tr class="tot"><td><b>${esc(p.placa)}</b></td><td class="n">${fmt(p.ralentiH,1)} h</td><td class="n">${cr==null?'—':fmt(cr,2)}</td><td class="n">${gal==null?'—':fmt(gal,1)+' gal'}</td><td class="n">${gal!=null&&p.gal>0?fmt(gal/p.gal*100,1)+' %':'—'}</td></tr></table></div>
     ${cr==null?'<p class="muted small">Falta el consumo de ralentí (gal/h) del vehículo en Configuración para calcular los galones.</p>':'<p class="muted small">Galones en ralentí = horas de ralentí del período × consumo de ralentí (gal/h) del vehículo en Configuración.</p>'}`;
 }
+/* Sobreconsumo por día: consumo estimado (km reales × estándar gal/km + ralentí) frente a los galones esperados según la ruta de TODOS los viajes registrados ese día */
+function sobreDia(pl,f,a,r,rd){
+  const tolS=S.config.tolSobre??80,std=vehiculo(pl).std,all=(r&&r.vs&&r.vs.length)?r.vs:a,
+    gv=all.reduce((x,v)=>x+galViaje(v),0),kmR=all.reduce((x,v)=>x+kmViaje(v),0),
+    kmS=r&&r.kmSat!=null?r.kmSat:null,kmP=(r&&r.kmPre!=null&&r.kmPre>=0&&!(r.gap>1))?r.kmPre:null,
+    ralG=(rd&&rd.ralG)||0,ralH=rd&&rd.ralH,cand=[];
+  if(kmS!=null)cand.push({f:'Satrack',g:kmS*std+ralG,km:kmS});
+  if(kmP!=null)cand.push({f:'odómetro',g:kmP*std+ralG,km:kmP});
+  let al=null;
+  if(gv>0&&cand.length){const m=[...cand].sort((x,y)=>y.g-x.g)[0],dif=m.g-gv,pct=dif/gv*100;
+    if(pct>=tolS){const causas=[];
+      if(kmR>0&&m.km>kmR*1.1)causas.push('recorrió '+fmt(m.km,1)+' km vs '+fmt(kmR,1)+' km de la ruta registrada'+(m.km>=kmR*1.5?' (≈ '+fmt(m.km/kmR,1)+' veces)':''));
+      if(kmR>0&&m.km>=kmR*1.5)causas.push('posible viaje adicional sin registrar o regreso en vacío');
+      if(ralG>0)causas.push('ralentí '+fmt(ralH,1)+' h ≈ '+fmt(ralG,1)+' gal');
+      al={n:pct>=tolS*1.5?'crit':'warn',f:m.f,dif,pct,causas,gEst:m.g}}}
+  return{gv,al,key:f+'|'+pl,hay:cand.length>0}
+}
+const obsConsumo=()=>S.config.obsConsumo||{};
+function sobreconsumos(dias){
+  const RD=new Map(rendDiario().map(r=>[r.fecha+'|'+r.placa,r])),lim=dias?dIso(Date.now()-dias*DIA):null;
+  return crucePorDia().filter(r=>r.vs.length&&(!lim||r.fecha>=lim)).map(r=>{const E=sobreDia(r.placa,r.fecha,r.vs,r,RD.get(r.fecha+'|'+r.placa));return{...E,fecha:r.fecha,placa:r.placa,obs:obsConsumo()[E.key]||null}}).filter(x=>x.al).sort((a,b)=>a.fecha<b.fecha?1:-1);
+}
+function avisarSobreconsumo(){
+  try{window._scToast=window._scToast||{};const nu=sobreconsumos(60).filter(x=>!x.obs&&!window._scToast[x.key]);if(!nu.length)return;
+    nu.forEach(x=>window._scToast[x.key]=1);
+    toast('⚠ Sobreconsumo sin justificar: '+nu.slice(0,3).map(x=>x.placa+' '+fd(x.fecha)+' ('+sgal(x.al.dif)+')').join(' · ')+(nu.length>3?' y '+(nu.length-3)+' más':'')+'. Agregue una observación en Conciliación.')}catch(e){}
+}
+function obsModal(key){
+  const [f,pl]=key.split('|'),cur=obsConsumo()[key],E=sobreconsumos().find(x=>x.key===key),old=document.getElementById('obs-modal');if(old)old.remove();
+  const m=document.createElement('div');m.id='obs-modal';m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:14px';
+  m.innerHTML=`<div class="card" style="max-width:560px;width:100%;margin:0"><h3 style="margin-top:0">Observación de sobreconsumo</h3><p class="small"><b>${esc(pl)}</b> · ${fd(f)}${E?' · '+sgal(E.al.dif)+' ('+sg(E.al.pct)+') frente a los galones de la ruta':''}</p><label>Justificación de la diferencia</label><textarea id="obs-t" rows="5" style="width:100%" placeholder="Ej.: Se hizo otro viaje Cantera Los Pioneros - Planta Argos Santa Marta / Grava y se regresó vacío porque no había material en la cantera."></textarea><div class="row" style="margin-top:10px"><button class="btn" type="button" id="obs-ok">Guardar observación</button>${cur?'<button class="btn sec" type="button" id="obs-del">Quitar observación</button>':''}<button class="btn sec" type="button" id="obs-x">Cancelar</button></div></div>`;
+  document.body.appendChild(m);const t=m.querySelector('#obs-t');t.value=cur?cur.t:'';t.focus();
+  const cerrar=()=>m.remove(),fin=()=>{save();cerrar();renderResumen()};
+  m.querySelector('#obs-x').onclick=cerrar;m.onclick=e=>{if(e.target===m)cerrar()};
+  m.querySelector('#obs-ok').onclick=()=>{const v=t.value.trim();if(!v)return toast('Escriba la observación');S.config.obsConsumo=S.config.obsConsumo||{};
+    S.config.obsConsumo[key]={t:v,d:hoyCO(),dif:E?+E.al.dif.toFixed(1):null,pct:E?+E.al.pct.toFixed(1):null};fin();toast('Observación guardada')};
+  const dl=m.querySelector('#obs-del');if(dl)dl.onclick=()=>{if(S.config.obsConsumo)delete S.config.obsConsumo[key];fin()};
+}
+if(!window._obsWired){window._obsWired=true;document.addEventListener('click',e=>{const b=e.target.closest('[data-obs]');if(b)obsModal(b.dataset.obs)})}
 function tablaViajes(vs,acciones,ctx){
   /* Conciliación (sin acciones): una fila por día y vehículo. Los km de Satrack y de odómetro NO se toman del registro del viaje sino de la
      sección Viajes → «Rutas realizadas por día y vehículo»: «Km Satrack (informe diario)» y «Km preop. (posterior − inicial)».
@@ -1089,24 +1130,16 @@ function tablaViajes(vs,acciones,ctx){
   if(!acciones){
     const C=new Map(crucePorDia().map(r=>[r.fecha+'|'+r.placa,r])),RD=new Map(rendDiario().map(r=>[r.fecha+'|'+r.placa,r])),tc=S.config.tolConsumo,g={};
     vs.forEach(v=>{const k=v.salida.slice(0,10)+'|'+v.placa;(g[k]=g[k]||[]).push(v)});
-    const T={n:0,km:0,gv:0,kS:0,gS:0,kP:0,gO:0,hS:false,hP:false,parc:false,al:0,lista:[]};
+    const T={n:0,km:0,gv:0,kS:0,gS:0,kP:0,gO:0,hS:false,hP:false,parc:false,al:0,sin:0};
     const rows=Object.keys(g).sort().map(k=>{const a=g[k],[f,pl]=k.split('|'),r=C.get(k)||{},std=vehiculo(pl).std,gv=a.reduce((x,v)=>x+galViaje(v),0),
       kmS=r.kmSat==null?null:r.kmSat,kmP=r.kmPre==null?null:r.kmPre,gS=kmS!=null?kmS*std:null,gO=kmP!=null&&kmP>=0?kmP*std:null,
       parcial=r.vs&&a.length<r.vs.length;
       T.n+=a.reduce((x,v)=>x+nV(v),0);T.km+=a.reduce((x,v)=>x+kmViaje(v),0);T.gv+=gv;if(kmS!=null){T.kS+=kmS;T.gS+=gS;T.hS=true}if(kmP!=null&&kmP>=0){T.kP+=kmP;T.gO+=gO;T.hP=true}if(parcial)T.parc=true;
-      /* Alerta de mayor consumo: consumo estimado del día (km reales × estándar + ralentí del día) frente a los galones esperados según la ruta */
-      const rd=RD.get(k)||{},ralG=rd.ralG||0,cand=[];
-      if(gS!=null&&!parcial)cand.push({f:'Satrack',g:gS+ralG,km:kmS});
-      if(gO!=null&&!parcial&&!(r.gap>1))cand.push({f:'odómetro',g:gO+ralG,km:kmP});
-      let al=null;
-      if(gv>0&&cand.length){const m=[...cand].sort((x,y)=>y.g-x.g)[0],dif=m.g-gv,pct=dif/gv*100;
-        if(pct>tc){const kmR=a.reduce((x,v)=>x+kmViaje(v),0),causas=[];
-          if(kmR>0&&m.km>kmR*(1+tc/100))causas.push('recorrió '+fmt(m.km-kmR,1)+' km más que los km de la ruta');
-          if(ralG>0)causas.push('ralentí '+fmt(rd.ralH,1)+' h ≈ '+fmt(ralG,1)+' gal');
-          al={n:pct>tc*2?'crit':'warn',f:m.f,dif,pct,causas};T.al++;T.lista.push(fd(f)+' '+pl+' ('+sgal(dif)+', '+sg(pct)+')')}}
+      const rd=RD.get(k)||{},E=sobreDia(pl,f,a,r,rd),al=E.al,ob=obsConsumo()[k];
+      if(al){T.al++;if(!ob)T.sin++}
       const cel=(g2,cmp)=>g2==null?'—':`<b>${fmt(g2,1)} gal</b>${cmp&&gv>0?'<div class="small muted">'+sgal(g2-gv)+' vs ruta</div>':''}`;
-      const celAl=al?chip(al.n,'Mayor consumo')+`<div class="small">${sgal(al.dif)} (${sg(al.pct)}) según ${al.f}</div>${al.causas.length?'<div class="small muted">'+esc(al.causas.join(' · '))+'</div>':''}`:(cand.length&&gv>0?'<span class="muted small">Normal</span>':'<span class="muted small">Sin datos para comparar</span>');
-      return `<tr${al?' style="background:var(--'+(al.n==='crit'?'badbg':'warnbg')+')"':''}><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}${parcial?'<div class="small muted">Los km diarios son del día completo (hay viajes del día en otro período)</div>':''}</td><td class="n">${a.reduce((x,v)=>x+nV(v),0)}</td><td class="n">${fmt(a.reduce((x,v)=>x+kmViaje(v),0),1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${kmS==null?'—':fmt(kmS,1)}</td><td class="n">${cel(gS,!parcial)}</td><td class="n">${kmP==null?'—':fmt(kmP)}${kmP!=null&&kmP<0?' <span class="bad">⚠</span>':''}${r.gap>1?'<div class="small muted">'+r.gap+' días hasta la siguiente medición</div>':''}</td><td class="n">${cel(gO,!parcial&&!(r.gap>1))}</td><td>${celAl}</td></tr>`});
+      const celAl=al?(ob?chip('ok','Sobreconsumo justificado'):chip(al.n,'Sobreconsumo'))+`<div class="small">${sgal(al.dif)} (${sg(al.pct)}) frente a la ruta · según ${al.f}</div>${al.causas.length?'<div class="small muted">'+esc(al.causas.join(' · '))+'</div>':''}${ob?'<div class="small" style="margin-top:4px"><b>Observación:</b> '+esc(ob.t)+'</div>':''}<button class="btn sec sm" type="button" data-obs="${esc(k)}" style="margin-top:4px">${ob?'Editar observación':'Agregar observación'}</button>`:(E.hay&&E.gv>0?'<span class="muted small">Normal</span>':'<span class="muted small">Sin datos para comparar</span>');
+      return `<tr${al&&!ob?' style="background:var(--'+(al.n==='crit'?'badbg':'warnbg')+')"':''}><td>${fd(f)}</td><td><b>${esc(pl)}</b></td><td>${a.map(v=>esc(v.ruta)+' ×'+nV(v)+(v.remision?' <span class="muted">('+esc(v.remision)+')</span>':'')).join('<br>')}${parcial?'<div class="small muted">Los km diarios son del día completo (hay viajes del día en otro período)</div>':''}</td><td class="n">${a.reduce((x,v)=>x+nV(v),0)}</td><td class="n">${fmt(a.reduce((x,v)=>x+kmViaje(v),0),1)}</td><td class="n">${fmt(gv,1)}</td><td class="n">${kmS==null?'—':fmt(kmS,1)}</td><td class="n">${cel(gS,!parcial)}</td><td class="n">${kmP==null?'—':fmt(kmP)}${kmP!=null&&kmP<0?' <span class="bad">⚠</span>':''}${r.gap>1?'<div class="small muted">'+r.gap+' días hasta la siguiente medición</div>':''}</td><td class="n">${cel(gO,!parcial&&!(r.gap>1))}</td><td>${celAl}</td></tr>`});
     const nDias=rows.length,pr=ctx&&ctx.gal>0?ctx:null;
     let cmpRows='';
     if(pr){
@@ -1116,9 +1149,9 @@ function tablaViajes(vs,acciones,ctx){
       cmpRows=`<tr class="tot"><td colspan="5"><b>GALONES TANQUEADOS EN EL PERÍODO</b><div class="small muted">${nTq} tanqueo${nTq===1?'':'s'} entre ${fd(pr.A.fecha)} y ${fd(pr.B.fecha)} (de tanque full a tanque full)</div></td><td class="n" colspan="5"><b>${fmt(tq,1)} gal</b></td><td></td></tr>
       <tr class="tot"><td colspan="5"><b>DIFERENCIA vs TANQUEADO</b><div class="small muted">(total del período − galones tanqueados)</div></td>${cd(T.gv,true)}<td></td>${cd(T.gS,T.hS)}<td></td>${cd(T.gO,T.hP)}<td></td></tr>`;
     }
-    const banner=T.al?`<div class="banner ${T.lista.length&&rows.length&&T.al>=Math.ceil(nDias/2)?'crit':'warn'}" style="margin:0 0 8px"><b>⚠ Mayor consumo al normal en ${T.al} de ${nDias} día(s) con viaje</b><div class="small">Se alerta cuando el consumo estimado del día (km reales × estándar gal/km + ralentí) supera en más de ${fmt(tc,0)} % los galones esperados según la ruta. ${esc(T.lista.join(' · '))}</div></div>`:'';
-    return banner+`<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th>Rutas y remisiones</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Km Satrack<div class="small muted">informe diario</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km)</div></th><th class="n">Km preop.<div class="small muted">posterior − inicial</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km preop. × estándar (gal/km)</div></th><th>Alerta de consumo<div class="small muted">vs galones de la ruta</div></th></tr>`+
-      rows.join('')+`<tr class="tot"><td colspan="3"><b>TOTAL DEL PERÍODO</b></td><td class="n">${T.n}</td><td class="n">${fmt(T.km,1)}</td><td class="n">${fmt(T.gv,1)}</td><td class="n">${T.hS?fmt(T.kS,1):'—'}</td><td class="n">${T.hS?fmt(T.gS,1)+' gal':'—'}</td><td class="n">${T.hP?fmt(T.kP):'—'}</td><td class="n">${T.hP?fmt(T.gO,1)+' gal':'—'}</td><td class="n">${T.al?T.al+' día(s) con alerta':'—'}</td></tr>`+cmpRows+`</table></div>`+(T.parc?'<p class="muted small">El total incluye los km diarios de días completos que se reparten entre dos períodos.</p>':'')+'';
+    const banner='';
+    return banner+`<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Vehículo</th><th>Rutas y remisiones</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Gal. aprox.<div class="small muted">según ruta</div></th><th class="n">Km Satrack<div class="small muted">informe diario</div></th><th class="n">Gal. estimados Satrack<div class="small muted">km Satrack × estándar (gal/km)</div></th><th class="n">Km preop.<div class="small muted">posterior − inicial</div></th><th class="n">Gal. estimados odómetro<div class="small muted">km preop. × estándar (gal/km)</div></th><th>Sobreconsumo<div class="small muted">vs galones de la ruta</div></th></tr>`+
+      rows.join('')+`<tr class="tot"><td colspan="3"><b>TOTAL DEL PERÍODO</b></td><td class="n">${T.n}</td><td class="n">${fmt(T.km,1)}</td><td class="n">${fmt(T.gv,1)}</td><td class="n">${T.hS?fmt(T.kS,1):'—'}</td><td class="n">${T.hS?fmt(T.gS,1)+' gal':'—'}</td><td class="n">${T.hP?fmt(T.kP):'—'}</td><td class="n">${T.hP?fmt(T.gO,1)+' gal':'—'}</td><td class="n">${T.al?T.al+' día(s) con sobreconsumo'+(T.sin?'<div class="small bad">'+T.sin+' sin justificar</div>':'<div class="small muted">todos justificados</div>'):'—'}</td></tr>`+cmpRows+`</table></div>`+(T.parc?'<p class="muted small">El total incluye los km diarios de días completos que se reparten entre dos períodos.</p>':'')+'';
   }
   return `<div class="wrap"><table class="tbl"><tr><th>Salida</th><th>Ruta</th><th>Remisión</th><th class="n">Viajes</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th><th></th></tr>`+
   vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),std=kmViaje(v);
@@ -1734,14 +1767,14 @@ function bindConductores(){
 function renderConfig(){
   renderRutas();renderConductores();
   const c=S.config;
-  $('#c-tol').value=c.tolPct;$('#c-crit').value=c.critFactor;$('#c-fuente').value=c.fuente;$('#c-tolcons').value=c.tolConsumo;$('#c-tolrep').value=c.tolRepeticion;$('#c-saltof').value=c.saltoFactor;$('#c-saltom').value=c.saltoMin;$('#c-nivmin').value=c.nivelMinGal??80;$('#c-nivmail').value=c.emailAvisos||'igcfuel@gmail.com';$('#c-nivmailon').value=c.emailAuto===false?'0':'1';
+  $('#c-tol').value=c.tolPct;$('#c-crit').value=c.critFactor;$('#c-fuente').value=c.fuente;$('#c-tolcons').value=c.tolConsumo;$('#c-tolrep').value=c.tolRepeticion;$('#c-saltof').value=c.saltoFactor;$('#c-saltom').value=c.saltoMin;$('#c-nivmin').value=c.nivelMinGal??80;$('#c-tolsobre').value=c.tolSobre??80;$('#c-nivmail').value=c.emailAvisos||'igcfuel@gmail.com';$('#c-nivmailon').value=c.emailAuto===false?'0':'1';
   $('#tbl-veh').innerHTML=S.vehiculos.length?`<tr><th>Placa</th><th class="n">Capacidad (gal)</th><th class="n">Estándar (gal/km)</th><th class="n">Ralentí (gal/h)</th><th></th></tr>`+
     S.vehiculos.map(v=>`<tr><td><b>${esc(v.placa)}</b></td><td class="n">${fmt(v.capacidad)}</td><td class="n">${fmt(v.std,3)}</td><td class="n">${fmt(v.ralenti,2)}</td><td class="n"><button class="btn sec sm" data-vh="${esc(v.placa)}">Editar</button> <button class="btn sec sm" data-vd="${esc(v.placa)}">Quitar</button></td></tr>`).join(''):'';
   $$('#tbl-veh [data-vh]').forEach(b=>b.onclick=()=>{const v=S.vehiculos.find(x=>x.placa===b.dataset.vh);$('#vh-placa').value=v.placa;$('#vh-cap').value=v.capacidad??'';$('#vh-std').value=v.std;$('#vh-ral').value=v.ralenti??''});
   $$('#tbl-veh [data-vd]').forEach(b=>b.onclick=()=>{if(confirm('¿Quitar el vehículo de la lista de parámetros? Los registros de tanqueo no se borran.')){S.vehiculos=S.vehiculos.filter(x=>x.placa!==b.dataset.vd);save();renderAll()}});
 }
 function bindConfig(){
-  const m={'#c-tol':'tolPct','#c-crit':'critFactor','#c-tolcons':'tolConsumo','#c-tolrep':'tolRepeticion','#c-saltof':'saltoFactor','#c-saltom':'saltoMin','#c-nivmin':'nivelMinGal'};
+  const m={'#c-tol':'tolPct','#c-crit':'critFactor','#c-tolcons':'tolConsumo','#c-tolrep':'tolRepeticion','#c-saltof':'saltoFactor','#c-saltom':'saltoMin','#c-nivmin':'nivelMinGal','#c-tolsobre':'tolSobre'};
   Object.entries(m).forEach(([s,k])=>$(s).onchange=()=>{const v=num($(s).value);if(v==null||v<0)return renderConfig();S.config[k]=v;save();renderAll()});
   $('#c-fuente').onchange=()=>{S.config.fuente=$('#c-fuente').value;save();renderAll()};
   $('#c-nivmail').onchange=()=>{const v=$('#c-nivmail').value.trim();if(v&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){toast('Correo no válido');return renderConfig()}S.config.emailAvisos=v||'igcfuel@gmail.com';save();renderAll()};
