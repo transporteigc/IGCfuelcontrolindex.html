@@ -317,6 +317,11 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     </details>
   </div>
   <div class="card">
+    <h2>Informe mensual en PDF: tanqueos y facturas asociadas</h2>
+    <p class="muted small" style="margin-top:0">Genera un PDF con todos los tanqueos de cada mes (fecha del tanqueo), indicando la factura asociada a cada uno (asociación manual desde <b>Conciliar</b> o cruce automático), el N.º de tirilla, un resumen de las facturas involucradas y las facturas del mes que no tienen tanqueos asociados.</p>
+    <div class="row"><div style="min-width:210px"><label>Mes del informe</label><select id="im-mes"></select></div><button class="btn" id="im-pdf" type="button">⬇ Generar informe mensual (PDF)</button></div>
+  </div>
+  <div class="card">
     <h2>Totales por mes: valor total y retención en la fuente</h2>
     <p class="muted small" style="margin-top:0">Suma todas las facturas según el mes de su fecha de emisión (un mes puede tener varias facturas, cada una con varios tanqueos asociados). La retención solo se suma en las facturas donde se activó <b>Aplicar retención en la fuente</b> al conciliarlas; Neto a pagar = valor total − retención.</p>
     <div class="wrap"><table class="tbl" id="ft-tbl"></table></div>
@@ -2154,7 +2159,7 @@ function conciliarFac(){
  if(fs.length)S.tanqueos.filter(t=>!usados.has(t.id)&&t.fecha>=addDias(fs[0],-td)&&t.fecha<=addDias(fs[fs.length-1],td)).forEach(t=>out.push({f:null,t,n:'crit',e:'TANQUEO SIN FACTURA',obs:''}));
  return out}
 function renderFacturas(){
- renderDocs();
+ renderDocs();fillMesInf();
  const R=conciliarFac(),fl=$('#fa-est').value,V=R.filter(r=>!fl||r.n===fl),c=n=>R.filter(r=>r.n===n).length,P=R.filter(r=>r.f&&r.t);
  const kp=(t,v,s)=>`<div class="kpi"><span>${t}</span><b>${v}</b>${s?`<span>${s}</span>`:''}</div>`;
  $('#tbl-fac').innerHTML=V.length?'<tr><th>Estado</th><th>Factura</th><th>Fecha</th><th>Placa</th><th class="n">Gal. factura</th><th class="n">Valor factura</th><th>Tanqueo</th><th class="n">Gal. tanqueo</th><th class="n">Dif. gal</th><th class="n">Dif. %</th><th class="n">Dif. valor</th><th>Observaciones</th></tr>'+V.map(r=>{const f=r.f,t=r.t;return`<tr><td>${chip(r.n,r.e)}</td><td>${f?esc(f.factura)+'<div class="small muted">'+esc(f.proveedor)+'</div>':'—'}</td><td>${f?fd(f.fecha):'—'}</td><td><b>${esc(f?f.placa||t&&t.placa||'':t.placa)}</b></td><td class="n">${f?fmt(f.gal,2):'—'}</td><td class="n">${f?money(f.valor):'—'}</td><td>${t?fd(t.fecha)+' '+esc(t.hora||'')+(t.tirilla?'<div class="small muted">Tirilla '+esc(t.tirilla)+'</div>':''):'—'}</td><td class="n">${t?fmt(t.gal,2):'—'}</td><td class="n">${r.dg==null?'—':sgal(r.dg,2)}</td><td class="n">${r.pg==null?'—':sg(r.pg)}</td><td class="n">${r.dv==null?'—':money(r.dv)}</td><td class="small">${esc(r.obs||'')}</td></tr>`}).join(''):'<tr><td class="muted">Suba las facturas del proveedor para iniciar la conciliación.</td></tr>'}
@@ -2503,6 +2508,78 @@ function exportXLSX(sec){
  secs.forEach(s=>Object.entries(libro(s)).forEach(([n,a])=>{let nm=n.slice(0,31);if(us.has(nm))nm=nm.slice(0,27)+'_'+us.size;us.add(nm);const ws=XLSX.utils.aoa_to_sheet(a);ws['!cols']=(a[0]||[]).map(()=>({wch:18}));XLSX.utils.book_append_sheet(wb,ws,nm)}));
  XLSX.writeFile(wb,'IGC_'+({resumen:'conciliacion',tanqueos:'tanqueos',viajes:'viajes',preop:'preoperacional',facturas:'facturas',satrack:'satrack',gerencial:'gerencial',config:'configuracion',todo:'completo'}[sec])+'_'+hoyCO()+'.xlsx')}
 
+/* ---------- Informe mensual PDF: tanqueos del mes y factura asociada a cada uno ---------- */
+function mesesInforme(){const m=new Set(S.tanqueos.map(t=>(t.fecha||'').slice(0,7)).filter(Boolean));
+ S.facturas.filter(f=>f.tipo!=='NC').forEach(f=>{const x=(f.fecha||'').slice(0,7);if(x)m.add(x)});return[...m].sort().reverse()}
+function fillMesInf(){const sl=$('#im-mes');if(!sl)return;const cur=sl.value;
+ sl.innerHTML='<option value="">Todos los meses</option>'+mesesInforme().map(m=>`<option value="${m}">${esc(mesTxt(m))}</option>`).join('');
+ if([...sl.options].some(o=>o.value===cur))sl.value=cur}
+function datosInforme(){
+ /* tanqueo -> factura: primero las asociaciones manuales (Conciliar), luego el cruce automático */
+ const mapa=new Map(),sinTanq=[];
+ docsFac().filter(d=>!d.soloNC).forEach(d=>{const c=calcDoc(d);c.T.forEach(t=>mapa.set(t.id,{k:'M|'+d.key,num:d.factura,prov:d.proveedor,fecha:d.fecha,gal:d.gal,valor:d.valor,via:'Asociación manual'}))});
+ conciliarFac().forEach(r=>{if(r.f&&r.t&&!mapa.has(r.t.id))mapa.set(r.t.id,{k:'A|'+r.f.id,num:r.f.factura||'(sin número)',prov:r.f.proveedor||'',fecha:r.f.fecha,gal:r.f.gal,valor:r.f.valor,via:'Cruce automático'});
+  if(r.f&&!r.t&&r.e==='FACTURA SIN TANQUEO')sinTanq.push({num:r.f.factura||'(sin número)',prov:r.f.proveedor||'',fecha:r.f.fecha,gal:r.f.gal,valor:r.f.valor})});
+ /* facturas conciliadas manualmente que quedaron sin tanqueos (todos los asociados fueron eliminados) */
+ docsFac().filter(d=>!d.soloNC&&ids0(d.head).length&&!calcDoc(d).T.length).forEach(d=>sinTanq.push({num:d.factura,prov:d.proveedor,fecha:d.fecha,gal:d.gal,valor:d.valor}));
+ const meses={};const M=m=>meses[m]=meses[m]||{m,tq:[],sin:[]};
+ S.tanqueos.forEach(t=>{const m=(t.fecha||'').slice(0,7);if(m)M(m).tq.push({t,f:mapa.get(t.id)||null})});
+ sinTanq.forEach(f=>{const m=(f.fecha||'').slice(0,7);if(m)M(m).sin.push(f)});
+ return Object.keys(meses).sort().map(k=>meses[k])}
+async function exportInformeMensualPDF(mesSel){
+ const J=window.jspdf&&window.jspdf.jsPDF;
+ if(!J)return toast('Exportar a PDF requiere conexión a internet (librería jsPDF)');
+ let D=datosInforme();if(mesSel)D=D.filter(x=>x.m===mesSel);
+ if(!D.length)return toast('No hay tanqueos ni facturas para el mes seleccionado');
+ toast('Generando informe mensual…');
+ const doc=new J({orientation:'landscape',unit:'pt',format:'a4'}),PW=doc.internal.pageSize.getWidth(),PH=doc.internal.pageSize.getHeight(),M=28,stamp=fCarga(ahoraCO());
+ let y=M,primera=true;
+ const nueva=()=>{if(primera)primera=false;else doc.addPage();y=M};
+ const encab=()=>{try{doc.addImage(LOGO,'PNG',M,y-4,80,29.6)}catch(e){}
+  doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(0,46,66);doc.text('IGC FUEL CONTROL · Informe mensual de tanqueos y facturas',M+92,y+10);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(100,112,138);doc.text('TRANSPORTE IGC S.A.S. · Generado el '+stamp,M+92,y+24);y+=48};
+ const tabla=(head,body,cs)=>{doc.autoTable({head:[head.map(pdfTxt)],body:body.map(r=>r.map(pdfTxt)),startY:y,margin:{left:M,right:M,top:M,bottom:34},theme:'grid',
+   styles:{fontSize:7,cellPadding:2.2,overflow:'linebreak',lineColor:[221,227,236],lineWidth:.4,textColor:[28,36,48]},
+   headStyles:{fillColor:[0,46,66],textColor:255,fontStyle:'bold',halign:'center'},alternateRowStyles:{fillColor:[244,246,249]},columnStyles:cs||{},
+   didParseCell:d=>{if(d.section==='body'&&String(d.row.raw[0]).toUpperCase().startsWith('TOTAL')){d.cell.styles.fontStyle='bold';d.cell.styles.fillColor=[232,236,242]}
+    if(d.section==='body'&&String(d.row.raw[d.row.raw.length-1]).startsWith('SIN FACTURA'))d.cell.styles.textColor=[180,35,24]}});
+  y=doc.lastAutoTable.finalY+16};
+ const titulo=t=>{if(y>PH-110)nueva();doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(28,36,48);doc.text(pdfTxt(t),M,y+8);y+=14};
+ const R=(n)=>({halign:'right'});
+ for(const o of D){
+  nueva();encab();
+  const tq=o.tq.sort((a,b)=>(a.t.fecha+' '+(a.t.hora||''))<(b.t.fecha+' '+(b.t.hora||''))?-1:1);
+  const gal=tq.reduce((s,x)=>s+(+x.t.gal||0),0),conP=tq.filter(x=>isNum(x.t.precio)),val=conP.reduce((s,x)=>s+x.t.gal*x.t.precio,0),
+   asoc=tq.filter(x=>x.f),facs=new Set(asoc.map(x=>x.f.k));
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(0,46,66);doc.text(pdfTxt(labMes(o.m).replace(/^./,c=>c.toUpperCase())),M,y+6);y+=16;
+  doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(28,36,48);
+  doc.text(pdfTxt('Tanqueos: '+tq.length+'  ·  Galones: '+fmt(gal,2)+'  ·  Valor tanqueos: '+(conP.length?money(val):'—')+'  ·  Con factura asociada: '+asoc.length+'  ·  Sin factura: '+(tq.length-asoc.length)+'  ·  Facturas involucradas: '+facs.size),M,y+6);y+=18;
+  titulo('1. Tanqueos del mes y factura asociada');
+  if(!tq.length){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(100,112,138);doc.text('No hay tanqueos registrados en este mes.',M,y+8);y+=22}
+  else{
+   const body=tq.map(({t,f})=>[fd(t.fecha),t.hora||'',t.placa,t.conductor||'',t.tirilla||'',+(+t.gal).toFixed(2),isNum(t.precio)?Math.round(t.precio):'',isNum(t.precio)?Math.round(t.gal*t.precio):'',
+    f?f.num:'',f?fd(f.fecha):'',f?f.prov:'',f?f.via:'SIN FACTURA ASOCIADA']);
+   body.push(['TOTAL · '+tq.length+' tanqueo(s)','','','','',+gal.toFixed(2),'',conP.length?Math.round(val):'','','','','']);
+   tabla(['Fecha','Hora','Placa','Conductor','N.º tirilla','Galones','Precio/gal','Valor tanqueo','N.º factura','Fecha factura','Proveedor','Asociación'],body,{5:R(),6:R(),7:R()})}
+  /* resumen de facturas involucradas */
+  const G=new Map();asoc.forEach(({t,f})=>{let g=G.get(f.k);if(!g){g={f,n:0,gal:0,val:0,sp:false};G.set(f.k,g)}g.n++;g.gal+=+t.gal||0;if(isNum(t.precio))g.val+=t.gal*t.precio;else g.sp=true});
+  titulo('2. Facturas asociadas a los tanqueos del mes');
+  if(!G.size){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(100,112,138);doc.text('Ningún tanqueo de este mes tiene factura asociada.',M,y+8);y+=22}
+  else{
+   const L=[...G.values()].sort((a,b)=>(a.f.fecha||'')<(b.f.fecha||'')?-1:1),
+    body=L.map(g=>[g.f.num,g.f.prov,fd(g.f.fecha),+(+g.f.gal||0).toFixed(2),isNum(g.f.valor)?Math.round(g.f.valor):'',g.n,+g.gal.toFixed(2),g.sp?'':Math.round(g.val),g.f.via]);
+   body.push(['TOTAL · '+L.length+' factura(s)','','',+L.reduce((s,g)=>s+(+g.f.gal||0),0).toFixed(2),Math.round(L.reduce((s,g)=>s+(isNum(g.f.valor)?+g.f.valor:0),0)),asoc.length,+asoc.reduce((s,x)=>s+(+x.t.gal||0),0).toFixed(2),'','']);
+   tabla(['N.º factura','Proveedor','Fecha factura','Gal. factura (total)','Valor factura (total)','Tanqueos de este mes','Gal. tanqueos de este mes','Valor tanqueos de este mes','Asociación'],body,{3:R(),4:R(),5:R(),6:R(),7:R()});
+   doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('Gal. y valor de la factura son los totales de la factura (puede cubrir tanqueos de otros meses); las columnas "de este mes" solo suman los tanqueos de este mes.',M,y-6);y+=8}
+  if(o.sin.length){
+   titulo('3. Facturas emitidas en el mes sin tanqueos asociados');
+   const body=o.sin.sort((a,b)=>(a.fecha||'')<(b.fecha||'')?-1:1).map(f=>[f.num,f.prov,fd(f.fecha),+(+f.gal||0).toFixed(2),isNum(f.valor)?Math.round(f.valor):'']);
+   tabla(['N.º factura','Proveedor','Fecha factura','Galones','Valor'],body,{3:R(),4:R()})}
+ }
+ const n=doc.getNumberOfPages();
+ for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('IGC FUEL CONTROL · TRANSPORTE IGC S.A.S.',M,PH-16);doc.text('Página '+i+' de '+n,PW-M,PH-16,{align:'right'})}
+ doc.save('IGC_informe_mensual_tanqueos_facturas_'+(mesSel||'todos')+'_'+hoyCO()+'.pdf');toast('Informe PDF generado')}
+
 function renderCloudCfg(){$('#cl-url').value=CL.url||'';$('#cl-tok').value=CL.token||'';$('#c-tpre').value=S.config.tolPreop;$('#c-tfp').value=S.config.tolFacPct;$('#c-tfd').value=S.config.tolFacDias;$('#c-tfv').value=S.config.tolFacValor;$('#c-rfp').value=S.config.rfPct}
 function initExtra(){
  const unlock=()=>{document.body.classList.remove('locked');if(cnxOrigen){toast('Conexión con Google Sheets configurada automáticamente ('+(cnxOrigen==='enlace'?'enlace de conexión':'archivo')+')');cnxOrigen=''}pull()};
@@ -2515,7 +2592,7 @@ function initExtra(){
  $$('[data-xl]').forEach(b=>b.onclick=()=>exportXLSX(b.dataset.xl));
  $('#xl-todo').onclick=()=>exportXLSX('todo');
  $$('[data-pdf]').forEach(b=>b.onclick=()=>exportPDF(b.dataset.pdf));$('#pdf-todo').onclick=()=>exportPDF('todo');
- $('#fd-mes').onchange=renderDocs;$('#pc-mes').onchange=renderPreComp;$('#pc-placa').onchange=renderPreComp;
+ $('#im-pdf').onclick=()=>exportInformeMensualPDF($('#im-mes').value);$('#fd-mes').onchange=renderDocs;$('#pc-mes').onchange=renderPreComp;$('#pc-placa').onchange=renderPreComp;
  $('#f-pre').onsubmit=guardarPre;$('#pr-imp').onclick=()=>$('#pr-file').click();$('#pr-file').onchange=e=>{const f=e.target.files[0];if(f)impPre(f);e.target.value=''};
  $('#fa-btn').onclick=()=>$('#fa-file').click();$('#fa-file').onchange=e=>{if(e.target.files.length)cargarFacturas([...e.target.files]);e.target.value=''};
  $('#fa-nc-btn').onclick=()=>$('#fa-nc-file').click();$('#fa-nc-file').onchange=e=>{if(e.target.files.length)cargarFacturas([...e.target.files],true);e.target.value=''};
