@@ -318,7 +318,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
   </div>
   <div class="card">
     <h2>Informe mensual en PDF: tanqueos y facturas asociadas</h2>
-    <p class="muted small" style="margin-top:0">Genera un PDF con todos los tanqueos de cada mes (fecha del tanqueo), indicando la factura asociada a cada uno (asociación manual desde <b>Conciliar</b> o cruce automático), el N.º de tirilla, un resumen de las facturas involucradas y las facturas del mes que no tienen tanqueos asociados.</p>
+    <p class="muted small" style="margin-top:0">Genera un PDF con todos los tanqueos de cada mes (fecha del tanqueo), indicando la factura asociada a cada uno (asociación manual desde <b>Conciliar</b> o cruce automático), el N.º de tirilla, <b>la retención en la fuente y el neto a pagar de cada tanqueo</b>, un resumen de las facturas involucradas (con su retención y neto), las facturas del mes sin tanqueos asociados y un resumen final con el total a pagar al proveedor menos retenciones.</p>
     <div class="row"><div style="min-width:210px"><label>Mes del informe</label><select id="im-mes"></select></div><button class="btn" id="im-pdf" type="button">⬇ Generar informe mensual (PDF)</button></div>
   </div>
   <div class="card">
@@ -2524,14 +2524,18 @@ function mesesInforme(){const m=new Set(S.tanqueos.map(t=>(t.fecha||'').slice(0,
 function fillMesInf(){const sl=$('#im-mes');if(!sl)return;const cur=sl.value;
  sl.innerHTML='<option value="">Todos los meses</option>'+mesesInforme().map(m=>`<option value="${m}">${esc(mesTxt(m))}</option>`).join('');
  if([...sl.options].some(o=>o.value===cur))sl.value=cur}
+/* retención en la fuente de la factura (tarifa y base definidas en «Conciliar») aplicada proporcionalmente a un valor (tanqueo o factura) */
+const rfDe=d=>{if(!d)return{on:false,pct:0,fac:1};const c=calcDoc(d);return{on:!!c.rfOn,pct:c.pct||0,fac:(c.rfOn&&c.base!=null&&d.valor>0)?c.base/d.valor:1}};
+const retDe=(rf,v)=>(rf&&rf.on&&isNum(v))?Math.round(v*rf.fac*rf.pct/100):0;
 function datosInforme(){
  /* tanqueo -> factura: primero las asociaciones manuales (Conciliar), luego el cruce automático */
- const mapa=new Map(),sinTanq=[];
- docsFac().filter(d=>!d.soloNC).forEach(d=>{const c=calcDoc(d);c.T.forEach(t=>mapa.set(t.id,{k:'M|'+d.key,num:d.factura,prov:d.proveedor,fecha:d.fecha,gal:d.gal,valor:d.valor,via:'Asociación manual'}))});
- conciliarFac().forEach(r=>{if(r.f&&r.t&&!mapa.has(r.t.id))mapa.set(r.t.id,{k:'A|'+r.f.id,num:r.f.factura||'(sin número)',prov:r.f.proveedor||'',fecha:r.f.fecha,gal:r.f.gal,valor:r.f.valor,via:'Cruce automático'});
-  if(r.f&&!r.t&&r.e==='FACTURA SIN TANQUEO')sinTanq.push({num:r.f.factura||'(sin número)',prov:r.f.proveedor||'',fecha:r.f.fecha,gal:r.f.gal,valor:r.f.valor})});
+ const mapa=new Map(),sinTanq=[],docDeLinea=new Map();
+ docsFac().forEach(d=>d.lines.forEach(l=>docDeLinea.set(l.id,d)));
+ docsFac().filter(d=>!d.soloNC).forEach(d=>{const c=calcDoc(d),rf=rfDe(d);c.T.forEach(t=>mapa.set(t.id,{k:'M|'+d.key,num:d.factura,prov:d.proveedor,fecha:d.fecha,gal:d.gal,valor:d.valor,via:'Asociación manual',rf}))});
+ conciliarFac().forEach(r=>{if(r.f&&r.t&&!mapa.has(r.t.id))mapa.set(r.t.id,{k:'A|'+r.f.id,num:r.f.factura||'(sin número)',prov:r.f.proveedor||'',fecha:r.f.fecha,gal:r.f.gal,valor:r.f.valor,via:'Cruce automático',rf:rfDe(docDeLinea.get(r.f.id))});
+  if(r.f&&!r.t&&r.e==='FACTURA SIN TANQUEO')sinTanq.push({num:r.f.factura||'(sin número)',prov:r.f.proveedor||'',fecha:r.f.fecha,gal:r.f.gal,valor:r.f.valor,rf:rfDe(docDeLinea.get(r.f.id))})});
  /* facturas conciliadas manualmente que quedaron sin tanqueos (todos los asociados fueron eliminados) */
- docsFac().filter(d=>!d.soloNC&&ids0(d.head).length&&!calcDoc(d).T.length).forEach(d=>sinTanq.push({num:d.factura,prov:d.proveedor,fecha:d.fecha,gal:d.gal,valor:d.valor}));
+ docsFac().filter(d=>!d.soloNC&&ids0(d.head).length&&!calcDoc(d).T.length).forEach(d=>sinTanq.push({num:d.factura,prov:d.proveedor,fecha:d.fecha,gal:d.gal,valor:d.valor,rf:rfDe(d)}));
  const meses={};const M=m=>meses[m]=meses[m]||{m,tq:[],sin:[]};
  S.tanqueos.forEach(t=>{const m=(t.fecha||'').slice(0,7);if(m)M(m).tq.push({t,f:mapa.get(t.id)||null})});
  sinTanq.forEach(f=>{const m=(f.fecha||'').slice(0,7);if(m)M(m).sin.push(f)});
@@ -2559,32 +2563,54 @@ async function exportInformeMensualPDF(mesSel){
  for(const o of D){
   nueva();encab();
   const tq=o.tq.sort((a,b)=>(a.t.fecha+' '+(a.t.hora||''))<(b.t.fecha+' '+(b.t.hora||''))?-1:1);
-  const gal=tq.reduce((s,x)=>s+(+x.t.gal||0),0),conP=tq.filter(x=>isNum(x.t.precio)),val=conP.reduce((s,x)=>s+x.t.gal*x.t.precio,0),
+  const gal=tq.reduce((s,x)=>s+(+x.t.gal||0),0),conP=tq.filter(x=>isNum(x.t.precio)),
+   vR=x=>Math.round(x.t.gal*x.t.precio),rT=x=>(x.f&&isNum(x.t.precio))?retDe(x.f.rf,x.t.gal*x.t.precio):0,
+   val=conP.reduce((s,x)=>s+vR(x),0),retT=conP.reduce((s,x)=>s+rT(x),0),netoT=val-retT,
    asoc=tq.filter(x=>x.f),facs=new Set(asoc.map(x=>x.f.k));
   doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(0,46,66);doc.text(pdfTxt(labMes(o.m).replace(/^./,c=>c.toUpperCase())),M,y+6);y+=16;
   doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(28,36,48);
-  doc.text(pdfTxt('Tanqueos: '+tq.length+'  ·  Galones: '+fmt(gal,2)+'  ·  Valor tanqueos: '+(conP.length?money(val):'—')+'  ·  Con factura asociada: '+asoc.length+'  ·  Sin factura: '+(tq.length-asoc.length)+'  ·  Facturas involucradas: '+facs.size),M,y+6);y+=18;
-  titulo('1. Tanqueos del mes y factura asociada');
+  doc.text(pdfTxt('Tanqueos: '+tq.length+'  ·  Galones: '+fmt(gal,2)+'  ·  Valor tanqueos: '+(conP.length?money(val):'—')+'  ·  Con factura asociada: '+asoc.length+'  ·  Sin factura: '+(tq.length-asoc.length)+'  ·  Facturas involucradas: '+facs.size),M,y+6);y+=13;
+  doc.setFont('helvetica','bold');
+  doc.text(pdfTxt('Retención en la fuente (tanqueos): '+(conP.length?money(retT):'—')+'  ·  Neto a pagar al proveedor (valor − retención): '+(conP.length?money(netoT):'—')),M,y+6);y+=18;
+  doc.setFont('helvetica','normal');
+  titulo('1. Tanqueos del mes, retención en la fuente y factura asociada');
   if(!tq.length){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(100,112,138);doc.text('No hay tanqueos registrados en este mes.',M,y+8);y+=22}
   else{
-   const body=tq.map(({t,f})=>[fd(t.fecha),t.hora||'',t.placa,t.conductor||'',t.tirilla||'',+(+t.gal).toFixed(2),isNum(t.precio)?Math.round(t.precio):'',isNum(t.precio)?Math.round(t.gal*t.precio):'',
-    f?f.num:'',f?fd(f.fecha):'',f?f.prov:'',f?f.via:'SIN FACTURA ASOCIADA']);
-   body.push(['TOTAL · '+tq.length+' tanqueo(s)','','','','',+gal.toFixed(2),'',conP.length?Math.round(val):'','','','','']);
-   tabla(['Fecha','Hora','Placa','Conductor','N.º tirilla','Galones','Precio/gal','Valor tanqueo','N.º factura','Fecha factura','Proveedor','Asociación'],body,{5:R(),6:R(),7:R()})}
+   const body=tq.map(x=>{const{t,f}=x,p=isNum(t.precio);return[fd(t.fecha),t.hora||'',t.placa,t.conductor||'',t.tirilla||'',+(+t.gal).toFixed(2),p?Math.round(t.precio):'',p?vR(x):'',p?rT(x):'',p?vR(x)-rT(x):'',f?f.num:'',f?f.prov:'',f?f.via:'SIN FACTURA ASOCIADA']});
+   body.push(['TOTAL · '+tq.length+' tanqueo(s)','','','','',+gal.toFixed(2),'',conP.length?val:'',conP.length?retT:'',conP.length?netoT:'','','','']);
+   tabla(['Fecha','Hora','Placa','Conductor','N.º tirilla','Galones','Precio/gal','Valor tanqueo','Retención en la fuente','Neto a pagar','N.º factura','Proveedor','Asociación'],body,{5:R(),6:R(),7:R(),8:R(),9:R()});
+   doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('Retención = valor del tanqueo × tarifa definida en la factura asociada (solo si en Conciliar se activó «Aplicar retención en la fuente»). Neto a pagar = valor del tanqueo − retención. Tanqueos sin factura asociada: sin retención.',M,y-6);y+=8}
   /* resumen de facturas involucradas */
-  const G=new Map();asoc.forEach(({t,f})=>{let g=G.get(f.k);if(!g){g={f,n:0,gal:0,val:0,sp:false};G.set(f.k,g)}g.n++;g.gal+=+t.gal||0;if(isNum(t.precio))g.val+=t.gal*t.precio;else g.sp=true});
-  titulo('2. Facturas asociadas a los tanqueos del mes');
+  const G=new Map();asoc.forEach(x=>{const{t,f}=x;let g=G.get(f.k);if(!g){g={f,n:0,gal:0,val:0,ret:0,sp:false};G.set(f.k,g)}g.n++;g.gal+=+t.gal||0;if(isNum(t.precio)){g.val+=vR(x);g.ret+=rT(x)}else g.sp=true});
+  titulo('2. Facturas asociadas a los tanqueos del mes (con retención en la fuente)');
+  let fV=0,fR=0;
   if(!G.size){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(100,112,138);doc.text('Ningún tanqueo de este mes tiene factura asociada.',M,y+8);y+=22}
   else{
-   const L=[...G.values()].sort((a,b)=>(a.f.fecha||'')<(b.f.fecha||'')?-1:1),
-    body=L.map(g=>[g.f.num,g.f.prov,fd(g.f.fecha),+(+g.f.gal||0).toFixed(2),isNum(g.f.valor)?Math.round(g.f.valor):'',g.n,+g.gal.toFixed(2),g.sp?'':Math.round(g.val),g.f.via]);
-   body.push(['TOTAL · '+L.length+' factura(s)','','',+L.reduce((s,g)=>s+(+g.f.gal||0),0).toFixed(2),Math.round(L.reduce((s,g)=>s+(isNum(g.f.valor)?+g.f.valor:0),0)),asoc.length,+asoc.reduce((s,x)=>s+(+x.t.gal||0),0).toFixed(2),'','']);
-   tabla(['N.º factura','Proveedor','Fecha factura','Gal. factura (total)','Valor factura (total)','Tanqueos de este mes','Gal. tanqueos de este mes','Valor tanqueos de este mes','Asociación'],body,{3:R(),4:R(),5:R(),6:R(),7:R()});
-   doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('Gal. y valor de la factura son los totales de la factura (puede cubrir tanqueos de otros meses); las columnas "de este mes" solo suman los tanqueos de este mes.',M,y-6);y+=8}
+   const L=[...G.values()].sort((a,b)=>(a.f.fecha||'')<(b.f.fecha||'')?-1:1);
+   let tG=0,tV=0,tR=0,tN=0,tqN=0,tqG=0,tqV=0,tqR=0;
+   const body=L.map(g=>{const rf=retDe(g.f.rf,g.f.valor),vf=isNum(g.f.valor)?Math.round(g.f.valor):'';
+    tG+=+g.f.gal||0;if(vf!==''){tV+=vf;tR+=rf;tN+=vf-rf}tqN+=g.n;tqG+=g.gal;if(!g.sp){tqV+=g.val;tqR+=g.ret}
+    return[g.f.num,g.f.prov,fd(g.f.fecha),+(+g.f.gal||0).toFixed(2),vf,(g.f.rf&&g.f.rf.on)?fmt(g.f.rf.pct,2)+' %':'—',vf===''?'':rf,vf===''?'':vf-rf,g.n,+g.gal.toFixed(2),g.sp?'':g.val,g.sp?'':g.ret,g.sp?'':g.val-g.ret,g.f.via]});
+   body.push(['TOTAL · '+L.length+' factura(s)','','',+tG.toFixed(2),tV,'',tR,tN,tqN,+tqG.toFixed(2),tqV,tqR,tqV-tqR,'']);
+   fV=tV;fR=tR;
+   tabla(['N.º factura','Proveedor','Fecha factura','Gal. factura (total)','Valor factura (total)','% Ret.','Retención factura','Neto a pagar factura','Tanqueos de este mes','Gal. tanqueos de este mes','Valor tanqueos de este mes','Retención tanqueos de este mes','Neto tanqueos de este mes','Asociación'],body,{3:R(),4:R(),5:R(),6:R(),7:R(),8:R(),9:R(),10:R(),11:R(),12:R()});
+   doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('Gal., valor, retención y neto de la factura son los totales de la factura (puede cubrir tanqueos de otros meses); las columnas "de este mes" solo suman los tanqueos de este mes.',M,y-6);y+=8}
+  let sV=0,sR=0;
   if(o.sin.length){
    titulo('3. Facturas emitidas en el mes sin tanqueos asociados');
-   const body=o.sin.sort((a,b)=>(a.fecha||'')<(b.fecha||'')?-1:1).map(f=>[f.num,f.prov,fd(f.fecha),+(+f.gal||0).toFixed(2),isNum(f.valor)?Math.round(f.valor):'']);
-   tabla(['N.º factura','Proveedor','Fecha factura','Galones','Valor'],body,{3:R(),4:R()})}
+   let sG=0;
+   const body=o.sin.sort((a,b)=>(a.fecha||'')<(b.fecha||'')?-1:1).map(f=>{const rf=retDe(f.rf,f.valor),vf=isNum(f.valor)?Math.round(f.valor):'';sG+=+f.gal||0;if(vf!==''){sV+=vf;sR+=rf}
+    return[f.num,f.prov,fd(f.fecha),+(+f.gal||0).toFixed(2),vf,vf===''?'':rf,vf===''?'':vf-rf]});
+   body.push(['TOTAL · '+o.sin.length+' factura(s)','','',+sG.toFixed(2),sV,sR,sV-sR]);
+   tabla(['N.º factura','Proveedor','Fecha factura','Galones','Valor','Retención en la fuente','Neto a pagar'],body,{3:R(),4:R(),5:R(),6:R()})}
+  /* resumen final: total a pagar al proveedor menos retenciones */
+  titulo('4. Resumen: total a pagar al proveedor menos retenciones');
+  const rs=[['Tanqueos del mes (valor de los tanqueos)',conP.length?val:'',conP.length?retT:'',conP.length?netoT:'']];
+  if(G.size)rs.push(['Facturas asociadas a tanqueos del mes (total de cada factura)',fV,fR,fV-fR]);
+  if(o.sin.length)rs.push(['Facturas del mes sin tanqueos asociados',sV,sR,sV-sR]);
+  rs.push(['TOTAL FACTURAS DEL MES (asociadas + sin tanqueos)',fV+sV,fR+sR,(fV+sV)-(fR+sR)]);
+  tabla(['Concepto','Valor','Retención en la fuente','Neto a pagar al proveedor'],rs,{1:R(),2:R(),3:R()});
+  doc.setFont('helvetica','italic');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('Una factura que cubre tanqueos de varios meses aparece completa en cada uno de esos meses.',M,y-6);y+=8
  }
  const n=doc.getNumberOfPages();
  for(let i=1;i<=n;i++){doc.setPage(i);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(100,112,138);doc.text('IGC FUEL CONTROL · TRANSPORTE IGC S.A.S.',M,PH-16);doc.text('Página '+i+' de '+n,PW-M,PH-16,{align:'right'})}
