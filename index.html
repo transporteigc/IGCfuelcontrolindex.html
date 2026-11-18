@@ -1204,7 +1204,7 @@ function tablaViajes(vs,acciones,ctx){
   const filas=vs.map(v=>{const o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),std=kmViaje(v);
     const dO=o!=null&&std>0?(o-std)/std*100:null,dS=s!=null&&std>0?(s-std)/std*100:null,tot=totalV(v);
     TN+=nV(v);if(tot!=null){TT+=tot;hayT=true}
-    return `<tr><td>${fd(v.salida.slice(0,10))}</td><td>${esc(v.salida.slice(11,16))}</td><td>${esc(v.conductor||'')||'<span class="muted">—</span>'}</td><td><b>${esc(v.placa)}</b></td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${isNum(v.valorUnit)?money(v.valorUnit):'—'}</td><td class="n">${tot==null?'—':money(tot)}</td><td>${esc(v.observacion||'')||'<span class="muted">—</span>'}</td><td class="n">${v.kmRuta==null?'<span class="bad" title="Ruta sin km estándar">⚠ sin km</span>':fmt(std,1)}</td><td class="n">${o==null?'—':fmt(o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td><td class="n">${fmt(s,1)}</td><td class="n">${sg(dO)}</td><td class="n">${sg(dS)}</td><td class="n">${fmt(galViaje(v),1)}</td><td class="n"><button class="btn sec sm" data-ev="${v.id}">Editar</button> <button class="btn sec sm" data-dv="${v.id}">Borrar</button></td></tr>`}).join('');
+    return `<tr><td>${fd(v.salida.slice(0,10))}</td><td>${v.sinHora?'<span class="muted">—</span>':esc(v.salida.slice(11,16))}</td><td>${esc(v.conductor||'')||'<span class="muted">—</span>'}</td><td><b>${esc(v.placa)}</b></td><td>${esc(v.ruta)}</td><td>${esc(v.remision||'')||'<span class="muted">—</span>'}</td><td class="n">${nV(v)}</td><td class="n">${isNum(v.valorUnit)?money(v.valorUnit):'—'}</td><td class="n">${tot==null?'—':money(tot)}</td><td>${esc(v.observacion||'')||'<span class="muted">—</span>'}</td><td class="n">${v.kmRuta==null?'<span class="bad" title="Ruta sin km estándar">⚠ sin km</span>':fmt(std,1)}</td><td class="n">${o==null?'—':fmt(o)}${o!=null&&o<0?' <span class="bad">⚠</span>':''}</td><td class="n">${fmt(s,1)}</td><td class="n">${sg(dO)}</td><td class="n">${sg(dS)}</td><td class="n">${fmt(galViaje(v),1)}</td><td class="n"><button class="btn sec sm" data-ev="${v.id}">Editar</button> <button class="btn sec sm" data-dv="${v.id}">Borrar</button></td></tr>`}).join('');
   return `<div class="wrap"><table class="tbl"><tr><th>Fecha</th><th>Hora</th><th>Conductor</th><th>Vehículo</th><th>Ruta</th><th>Remisión proveedor</th><th class="n">Viajes</th><th class="n">Valor unitario</th><th class="n">Total</th><th>Observación</th><th class="n">Km estándar</th><th class="n">Odómetro</th><th class="n">Satrack</th><th class="n">Odo vs ruta</th><th class="n">Satrack vs ruta</th><th class="n">Gal. aprox.</th><th></th></tr>`+filas+`<tr class="tot"><td colspan="6"><b>TOTAL</b></td><td class="n">${TN}</td><td></td><td class="n">${hayT?money(TT):'—'}</td><td colspan="8"></td></tr></table></div>`;
 }
 
@@ -1414,7 +1414,7 @@ function editarViaje(id){
   const enCat=v.rutaId&&S.rutas.some(r=>r.id===v.rutaId);
   renderRutaSelect();
   $('#v-ruta').value=enCat?v.rutaId:'__otra';$('#v-ruta-otra').value=enCat?'':v.ruta;$('#v-remision').value=v.remision||'';$('#v-nv').value=nV(v);$('#v-cond').value=v.conductor||'';
-  $('#v-fecha').value=(v.salida||'').slice(0,10);$('#v-hora').value=(v.salida||'').slice(11,16);$('#v-placa').value=v.placa;$('#v-kmruta').value=v.kmRuta??'';$('#v-oi').value=v.odoIni??'';$('#v-of').value=v.odoFin??'';$('#v-sat').value=v.satKm??'';
+  $('#v-fecha').value=(v.salida||'').slice(0,10);$('#v-hora').value=v.sinHora?'':(v.salida||'').slice(11,16);$('#v-placa').value=v.placa;$('#v-kmruta').value=v.kmRuta??'';$('#v-oi').value=v.odoIni??'';$('#v-of').value=v.odoFin??'';$('#v-sat').value=v.satKm??'';
   $('#v-vu').value=v.valorUnit??'';$('#v-obs').value=v.observacion||'';
   $('#v-tec').open=v.kmRuta==null||isNum(v.odoIni)||isNum(v.odoFin)||isNum(v.satKm);
   rutaCambio(true);
@@ -1458,8 +1458,51 @@ function parseHora(v){
 function leerTablaViajes(file){return new Promise((res,rej)=>{const ext=file.name.split('.').pop().toLowerCase(),rd=new FileReader();
   if(ext==='csv'||ext==='txt'){rd.onload=()=>res(parseCSV(rd.result));rd.readAsText(file,'UTF-8')}
   else{if(typeof XLSX==='undefined')return rej(new Error('Leer Excel requiere conexión a internet; guarde la hoja como CSV'));
-   rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array',cellDates:false}),nom=wb.SheetNames.find(n=>norm(n)==='viajes')||wb.SheetNames[0];res(XLSX.utils.sheet_to_json(wb.Sheets[nom],{header:1,raw:true,defval:''}))}catch(e){rej(e)}};rd.readAsArrayBuffer(file)}})}
-function importarViajesFilas(rows){
+   rd.onload=()=>{try{const wb=XLSX.read(rd.result,{type:'array',cellDates:false}),nom=wb.SheetNames.find(n=>norm(n)==='viajes')||wb.SheetNames[0];const fl=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''}),rows=fl(nom);rows.hojas={};wb.SheetNames.forEach(n=>{if(n!==nom)rows.hojas[norm(n)]=fl(n)});res(rows)}catch(e){rej(e)}};rd.readAsArrayBuffer(file)}})}
+/* ---- Formato del aplicativo de viajes en Google Sheets: columnas clave | json | actualizado | usuario ---- */
+function catalogoDesdeFilas(rows){
+  const m=new Map();if(!rows||!rows.length)return m;
+  const add=(d,clave)=>{if(!d||typeof d!=='object'||'rutaCodigo' in d||'cantidad' in d)return;
+    const per=[d.nombre,d.apellidos||d.apellido].filter(Boolean).join(' '),
+      nom=per||d.name||d.nombreCompleto||d.descripcion||d.detalle||(d.origen&&d.destino?d.origen+' - '+d.destino:'')||d.ruta||d.conductor||'';
+    if(!nom)return;[d.id,d.codigo,d.code,clave].filter(Boolean).forEach(k=>m.set(String(k).trim(),String(nom).trim()))};
+  const hi=rows.findIndex(r=>r.map(norm).includes('json'));
+  if(hi>=0){const h=rows[hi].map(norm),ic=h.indexOf('clave'),ij=h.indexOf('json');
+    rows.slice(hi+1).forEach(r=>{try{add(JSON.parse(r[ij]),ic>=0?r[ic]:'')}catch(e){}})}
+  else{const h=rows[0].map(norm);rows.slice(1).forEach(r=>{const d={};h.forEach((k,i)=>{if(k)d[k]=r[i]});add(d,'')})}
+  return m;
+}
+function importarViajesJson(rows,hj,hojas){
+  const h=rows[hj].map(norm),ij=h.indexOf('json'),ic=h.indexOf('clave'),H=hojas||{},hoja=re=>{const k=Object.keys(H).find(n=>re.test(n));return k?H[k]:null};
+  const cCond=catalogoDesdeFilas(hoja(/conductor|chofer|driver/)),cRuta=catalogoDesdeFilas(hoja(/ruta/));
+  const R={nuevos:0,dup:0,act:0,sinRuta:0,sinFecha:0,noCat:new Set(),sinNombre:new Set()},porExt=new Map(S.viajes.filter(v=>v.extId).map(v=>[v.extId,v]));
+  rows.slice(hj+1).forEach(r=>{
+    let d;try{d=JSON.parse(r[ij])}catch(e){return}
+    if(!d||typeof d!=='object')return;
+    const ext=String(d.id||(ic>=0?r[ic]:'')||'').trim(),f=parseFecha(d.fecha);
+    if(!f){R.sinFecha++;return}
+    const pt=String(d.vehiculo||'').toUpperCase(),pm=pt.replace(/[\s\-]/g,'').match(/[A-Z]{3}\d{3}/),pl=pm?pm[0]:normPlaca(pt),cod=String(d.rutaCodigo||'').trim();
+    if(!pl||!(cod||d.ruta)){R.sinRuta++;return}
+    const rn=String(d.ruta||cRuta.get(cod)||cod).trim(),idc=String(d.conductorId||'').trim(),cond=String(d.conductor||cCond.get(idc)||idc).trim();
+    if(!cRuta.get(cod)&&!d.ruta)R.sinNombre.add(cod);
+    const rt=S.rutas.find(x=>norm(x.nombre)===norm(rn)||(cod&&norm(x.nombre)===norm(cod))),n=Math.max(1,Math.round(num(d.cantidad)||1)),vu=num(d.valorUnitario),
+      tot=num(d.total)!=null?num(d.total):(vu!=null?Math.round(vu*n*100)/100:null),fecha=f.iso.slice(0,10),e=ext?porExt.get(ext):null;
+    const base={placa:pl,conductor:cond,ruta:rt?rt.nombre:rn,remision:'',nViajes:n,valorUnit:vu,total:tot,observacion:String(d.observacion||'').trim(),rutaCodigo:cod,conductorId:idc};
+    if(e){
+      const antes=JSON.stringify([e.salida,e.placa,e.conductor,e.ruta,e.nViajes,e.valorUnit,e.total,e.observacion,e.rutaId]);
+      const hora=e.sinHora?'00:00':(e.salida||'').slice(11,16)||'00:00';
+      Object.assign(e,base,{salida:fecha+'T'+hora});
+      if(rt){if(e.rutaId!==rt.id||e.kmRuta==null){e.rutaId=rt.id;e.kmRuta=rt.km}}else{e.rutaId=null;e.kmRuta=null}
+      if(!rt)R.noCat.add(rn);
+      JSON.stringify([e.salida,e.placa,e.conductor,e.ruta,e.nViajes,e.valorUnit,e.total,e.observacion,e.rutaId])!==antes?R.act++:R.dup++;return}
+    if(!rt)R.noCat.add(rn);
+    const v=Object.assign({id:uid(),extId:ext,salida:fecha+'T00:00',sinHora:true,rutaId:rt?rt.id:null,kmRuta:rt?rt.km:null,odoIni:null,odoFin:null,satKm:null},base);
+    S.viajes.push(v);if(ext)porExt.set(ext,v);R.nuevos++});
+  return R;
+}
+function importarViajesFilas(rows,hojas){
+  const hj=rows.findIndex(r=>{const h=r.map(norm);return h.includes('json')&&(h.includes('clave')||h.includes('actualizado'))});
+  if(hj>=0)return importarViajesJson(rows,hj,hojas||rows.hojas);
   const hi=rows.findIndex(r=>{const h=r.map(norm);return h.some(x=>/^fecha/.test(x))&&h.some(x=>/^(vehiculo|placa)/.test(x))});
   if(hi<0)return{err:'No se encontró el encabezado. El archivo debe tener las columnas Fecha, Hora, Conductor, Vehiculo, Ruta, Remision proveedor, Viajes, Valor unitario, Total y Observacion.'};
   const h=rows[hi].map(norm),f=re=>h.findIndex(x=>re.test(x));
@@ -1497,6 +1540,7 @@ function mostrarResImport(R,origen){
   el.innerHTML='<b>'+esc(origen)+':</b> '+R.nuevos+' viaje'+(R.nuevos===1?'':'s')+' importado'+(R.nuevos===1?'':'s')
    +(R.act?' · '+R.act+' actualizado'+(R.act===1?'':'s'):'')+(R.dup?' · '+R.dup+' repetido'+(R.dup===1?'':'s')+' omitido'+(R.dup===1?'':'s'):'')
    +(R.sinFecha?' · '+R.sinFecha+' fila(s) sin fecha válida omitida(s)':'')+(R.sinRuta?' · '+R.sinRuta+' fila(s) sin vehículo o ruta omitida(s)':'')
+   +(R.sinNombre&&R.sinNombre.size?'<div class="warnline" style="margin-top:6px">No se encontró el nombre de estas rutas (códigos): '+[...R.sinNombre].slice(0,12).map(esc).join(', ')+'. Se usó el código como nombre; cree rutas con ese nombre o con la pestaña «Rutas» del Sheets disponible.</div>':'')
    +(nc.length?'<div class="warnline" style="margin-top:6px">Rutas que no están en Configuración → Rutas estándar (quedaron <b>sin km estándar</b>): '+nc.slice(0,8).map(esc).join(', ')+(nc.length>8?' y '+(nc.length-8)+' más':'')+'. Créelas con <b>exactamente el mismo nombre</b> y vuelva a importar el archivo: los viajes ya cargados toman los km sin duplicarse. También puede editar cada viaje.</div>':'');
   toast(R.nuevos+' viajes importados');
 }
@@ -1512,7 +1556,11 @@ async function impViajesSheets(){
     const r=await fetch('https://docs.google.com/spreadsheets/d/'+m[1]+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(hoja));
     if(!r.ok)throw new Error('HTTP '+r.status);
     const tx=await r.text();if(/^\s*<(!doctype|html)/i.test(tx))throw new Error('La hoja no es pública o la pestaña «'+hoja+'» no existe');
-    mostrarResImport(importarViajesFilas(parseCSV(tx)),'Google Sheets («'+hoja+'»)');
+    const hojas={};
+    for(const [k,nom] of [['conductores','Conductores'],['rutas','Rutas']]){
+      try{const rr=await fetch('https://docs.google.com/spreadsheets/d/'+m[1]+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(nom));
+        if(rr.ok){const t2=await rr.text();if(!/^\s*<(!doctype|html)/i.test(t2))hojas[k]=parseCSV(t2)}}catch(e){}}
+    mostrarResImport(importarViajesFilas(parseCSV(tx),hojas),'Google Sheets («'+hoja+'»)');
   }catch(e){$('#v-imp-res').innerHTML='<span class="bad">No se pudo traer la hoja: '+esc(e.message||String(e))+'. Compártala como «Cualquier persona con el enlace puede ver» o descárguela como Excel e impórtela con el botón de arriba.</span>'}
   finally{b.disabled=false}
 }
