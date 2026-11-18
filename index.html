@@ -98,6 +98,48 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
 #sync{cursor:pointer}#sync:hover{text-decoration:underline}
 #dx-out code{background:var(--nabg);padding:1px 5px;border-radius:4px}
 #dx-out td:nth-child(4){min-width:240px}#dx-out td:nth-child(1){width:28px}
+
+/* ===== Viajes: vista interactiva + sincronización automática ===== */
+.vg-estado{margin:10px 0 0;font-size:13.5px}
+.vv-ctl{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 8px;align-items:center}
+.vv-ctl input{flex:2;min-width:220px}.vv-ctl select{flex:1;min-width:130px;width:auto}
+.vv-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
+.vv-tabs button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:99px;padding:6px 13px;cursor:pointer;font:inherit;font-size:13.5px}
+.vv-tabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+@media (prefers-color-scheme:dark){.vv-tabs button.on{background:#2a6db3;border-color:#2a6db3}}
+.vv-chart{background:var(--nabg);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.vv-chart h4{margin:0 0 6px;font-size:12.5px;color:var(--muted);font-weight:600}
+.vv-bars{display:flex;align-items:flex-end;gap:4px;height:104px;overflow-x:auto}
+.vv-b{flex:1 0 20px;max-width:46px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;cursor:pointer;background:none;border:0;padding:0;font:inherit;color:var(--muted)}
+.vv-b i{display:block;width:100%;background:var(--s1);border-radius:4px 4px 0 0;min-height:3px;transition:opacity .15s}
+.vv-b:hover i{opacity:.75}.vv-b.on i{background:var(--brand2)}
+.vv-b span{font-size:10.5px;margin-top:2px}.vv-b em{font-style:normal;font-size:10.5px;color:var(--ink)}
+.vv-dia{display:inline-flex;gap:6px;align-items:center;background:var(--warnbg);color:var(--warn);border-radius:99px;padding:2px 6px 2px 11px;font-size:12.5px;font-weight:600;margin-left:8px}
+.vv-dia button{border:0;background:transparent;color:inherit;cursor:pointer;font:inherit;font-weight:700}
+.vv-grp{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
+.vv-grp>summary{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:10px 14px;cursor:pointer;list-style:none}
+.vv-grp>summary::-webkit-details-marker{display:none}
+.vv-grp>summary::before{content:'▸';color:var(--muted);transition:transform .15s}.vv-grp[open]>summary::before{transform:rotate(90deg)}
+.vv-gt{font-weight:700;text-transform:capitalize}.vv-gs{color:var(--muted);font-size:12.5px}
+.vv-gn,.vv-gv{font-size:13px}.vv-gv{font-weight:600}
+.vv-gr{font-size:12px;border-radius:99px;padding:1px 8px;font-weight:600}
+.vv-gr.ok{background:var(--okbg);color:var(--ok)}.vv-gr.warn{background:var(--warnbg);color:var(--warn)}.vv-gr.none{background:var(--nabg);color:var(--na)}
+.vv-gb{flex:1 1 90px;min-width:70px;height:7px;background:var(--nabg);border-radius:9px;overflow:hidden;margin-left:auto}.vv-gb i{display:block;height:100%;border-radius:9px}
+.vv-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));padding:2px 14px 14px}
+.vv-card{border:1px solid var(--line);border-left:5px solid var(--c);border-radius:10px;background:var(--bg)}
+.vv-card>summary{list-style:none;cursor:pointer;padding:9px 11px}.vv-card>summary::-webkit-details-marker{display:none}
+.vv-top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.vv-pl{font-weight:700;letter-spacing:.5px}
+.vv-n{background:var(--c);color:#fff;border-radius:99px;padding:0 9px;font-weight:700;font-size:13px}
+.vv-ruta{margin:3px 0 2px;font-weight:600;font-size:14px}.vv-meta{color:var(--muted);font-size:12.5px}
+.vv-rems{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.vv-rem{background:var(--okbg);color:var(--ok);border-radius:6px;padding:1px 8px;font-size:12.5px;font-weight:600}
+.vv-rem.none{background:var(--nabg);color:var(--na);font-weight:400}
+.vv-val{margin-left:auto;font-weight:700;font-size:13px}
+.vv-det{padding:6px 11px 10px;border-top:1px dashed var(--line);font-size:13px}
+.vv-det table{width:100%;border-collapse:collapse}.vv-det td{padding:2px 0;vertical-align:top}.vv-det td:last-child{text-align:right}
+.vv-det .row{margin-top:8px}
+.vv-vacio{text-align:center;color:var(--muted);padding:26px 10px}
 </style>
 </head>
 <body class="locked">
@@ -258,19 +300,21 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
     </form>
   </div>
   <div class="card">
-    <h2>Traer viajes desde el aplicativo de control de viajes</h2>
+    <h2>Viajes desde el aplicativo de control de viajes <span class="chip ok" style="vertical-align:middle">sincronización automática</span></h2>
     <p class="muted small" style="margin-top:0">Importe el Excel/CSV de «registro de viajes» con las columnas <b>Fecha, Hora, Conductor, Vehiculo, Ruta, Remision proveedor, Viajes, Valor unitario, Total, Observacion</b>, o tráigalo directamente de su hoja de Google Sheets. Los viajes ya cargados (misma fecha, hora, vehículo, ruta, remisión y número de viajes) no se duplican. Si la ruta tiene el mismo nombre que una ruta de Configuración → Rutas estándar, se toman sus km automáticamente.</p>
     <div class="row">
       <button class="btn" type="button" id="v-imp">Importar desde Excel / CSV</button>
       <input type="file" id="v-imp-file" accept=".csv,.txt,.xlsx,.xls" hidden>
       <button class="btn sec" type="button" id="v-exp">Descargar Excel (formato registro de viajes)</button>
     </div>
-    <div class="row" style="margin-top:10px;align-items:flex-end">
+    <div id="v-gs-estado" class="banner na vg-estado">Revisando la sincronización de viajes…</div>
+    <details class="man" id="v-gs-det" style="margin-top:8px"><summary>Enlace de la hoja de viajes (se pone una sola vez)</summary>
+    <div class="row" style="margin-top:8px;align-items:flex-end">
       <div style="min-width:280px;flex:2"><label>Enlace de la hoja de Google Sheets del aplicativo de viajes</label><input id="v-gs-url" placeholder="https://docs.google.com/spreadsheets/d/…/edit"></div>
       <div style="min-width:140px;flex:1"><label>Nombre de la pestaña</label><input id="v-gs-hoja" value="Viajes"></div>
-      <button class="btn sec" type="button" id="v-gs">Traer desde Google Sheets</button>
+      <button class="btn" type="button" id="v-gs">Guardar y sincronizar</button>
     </div>
-    <p class="muted small" style="margin:6px 0 0">Para traerlo desde el enlace, la hoja debe estar compartida como «Cualquier persona con el enlace puede ver». Si no lo está, descargue la pestaña como Excel (Archivo → Descargar) y use «Importar desde Excel / CSV».</p>
+    <p class="muted small" style="margin:6px 0 0">El enlace queda guardado en la configuración de este aplicativo (y en Google Sheets, así que también queda en los demás computadores). Desde ahí, cada viaje que se registre en el aplicativo de viajes aparece aquí solo, sin volver a pulsar nada. La hoja debe estar compartida como «Cualquier persona con el enlace puede ver».</p></details>
     <div id="v-imp-res" class="small" style="margin-top:8px"></div>
   </div>
   <div class="card">
@@ -1340,6 +1384,10 @@ function fotoInput(btn,input,key,out){
 
 /* ===================== Render: viajes ===================== */
 let editingV=null;
+const VV={vista:'dias',q:'',placa:'',cond:'',ruta:'',dia:'',lim:40,base:[]};
+const colP=pl=>'var(--s'+(1+Math.abs([...String(pl)].reduce((a,c)=>(a*31+c.charCodeAt(0))|0,7))%8)+')';
+const diaTxt=f=>{const d=new Date(f+'T12:00:00');return isNaN(d)?f:d.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'})};
+const remChips=r=>{const a=String(r||'').split(/[,;]+/).map(x=>x.trim()).filter(Boolean);return a.length?a.map(x=>`<span class="vv-rem" title="Remisión proveedor">🧾 ${esc(x)}</span>`).join(''):'<span class="vv-rem none" title="Este viaje no tiene número de remisión">sin remisión</span>'};
 function renderViajes(){
   renderListas();
   renderRutaSelect();
@@ -1348,8 +1396,81 @@ function renderViajes(){
   if(mm.includes(cm))sm.value=cm;sm.onchange=so.onchange=renderViajes;
   const vs=S.viajes.filter(v=>(!sm.value||(v.salida||'').slice(0,7)===sm.value)&&(!so.value||(so.value==='sheets'?!!v.extId:!v.extId))).sort((a,b)=>dtV(b)-dtV(a)),sk=S.viajes.filter(sinKmV).length;
   $('#vr-cuenta').textContent=vs.length+' de '+S.viajes.length+' viajes'+(sk?' · '+sk+' sin km estándar (ruta pendiente en Configuración)':'');
-  $('#viajes-host').innerHTML=vs.length?tablaViajes(vs,true):'<p class="muted">'+(S.viajes.length?'No hay viajes con ese filtro.':'Aún no hay viajes registrados.')+'</p>';
-  renderViajesDia();
+  VV.base=vs;vvCtl();vvDraw();
+  renderViajesDia();vgEstado();
+}
+function vvCtl(){
+  const b=VV.base,u=f=>[...new Set(b.map(f).filter(Boolean))].sort((x,y)=>String(x).localeCompare(String(y),'es')),pl=u(v=>v.placa),cd=u(v=>v.conductor),rt=u(v=>v.ruta);
+  if(!pl.includes(VV.placa))VV.placa='';if(!cd.includes(VV.cond))VV.cond='';if(!rt.includes(VV.ruta))VV.ruta='';
+  const op=(a,sel,t)=>`<option value="">${t}</option>`+a.map(x=>`<option value="${esc(x)}"${x===sel?' selected':''}>${esc(x)}</option>`).join('');
+  const T=[['dias','📅 Por día'],['placas','🚛 Por vehículo'],['rutas','🛣️ Por ruta'],['conds','👤 Por conductor'],['tabla','📋 Tabla completa']];
+  $('#viajes-host').innerHTML=`<div id="vv-kpis"></div>
+  <div class="vv-ctl"><input id="vv-q" type="search" placeholder="🔎 Buscar placa, ruta, conductor o N.º de remisión…" value="${esc(VV.q)}" autocomplete="off">
+   <select id="vv-pl">${op(pl,VV.placa,'Todos los vehículos')}</select><select id="vv-cd">${op(cd,VV.cond,'Todos los conductores')}</select><select id="vv-rt">${op(rt,VV.ruta,'Todas las rutas')}</select>
+   <button class="btn sec sm" type="button" id="vv-clr">Limpiar filtros</button></div>
+  <div class="vv-tabs">${T.map(t=>`<button type="button" data-vv="${t[0]}" class="${VV.vista===t[0]?'on':''}">${t[1]}</button>`).join('')}<span style="flex:1"></span><button type="button" id="vv-abre">⊞ Abrir todo</button><button type="button" id="vv-cierra">⊟ Cerrar todo</button></div>
+  <div id="vv-chart"></div><div id="vv-out"></div>`;
+  $('#vv-q').oninput=e=>{VV.q=e.target.value;VV.lim=40;vvDraw()};
+  $('#vv-pl').onchange=e=>{VV.placa=e.target.value;VV.lim=40;vvDraw()};$('#vv-cd').onchange=e=>{VV.cond=e.target.value;VV.lim=40;vvDraw()};$('#vv-rt').onchange=e=>{VV.ruta=e.target.value;VV.lim=40;vvDraw()};
+  $('#vv-clr').onclick=()=>{VV.q=VV.placa=VV.cond=VV.ruta=VV.dia='';VV.lim=40;vvCtl();vvDraw()};
+  $$('#viajes-host [data-vv]').forEach(x=>x.onclick=()=>{VV.vista=x.dataset.vv;VV.lim=40;$$('#viajes-host [data-vv]').forEach(y=>y.classList.toggle('on',y===x));vvDraw()});
+  $('#vv-abre').onclick=()=>$$('#vv-out details.vv-grp').forEach(d=>d.open=true);
+  $('#vv-cierra').onclick=()=>$$('#vv-out details.vv-grp').forEach(d=>d.open=false);
+  ['#vv-abre','#vv-cierra'].forEach(s=>{$(s).className='btn sec sm'});
+}
+const vvFiltrado=()=>{const q=norm(VV.q);return VV.base.filter(v=>(!VV.placa||v.placa===VV.placa)&&(!VV.cond||v.conductor===VV.cond)&&(!VV.ruta||v.ruta===VV.ruta)&&(!q||norm([v.placa,v.ruta,v.conductor,v.remision,v.observacion].join(' ')).includes(q)))};
+function vvStats(a){const n=a.reduce((x,v)=>x+nV(v),0),hay=a.some(v=>totalV(v)!=null),tot=a.reduce((x,v)=>x+(totalV(v)||0),0),cr=a.filter(v=>String(v.remision||'').trim()).length;return{n,reg:a.length,hay,tot,cr}}
+function vvCard(v){
+  const tot=totalV(v),o=(isNum(v.odoIni)&&isNum(v.odoFin))?v.odoFin-v.odoIni:null,s=num(v.satKm),c=colP(v.placa),f=(v.salida||'').slice(0,10);
+  return `<details class="vv-card" style="--c:${c}"><summary><div class="vv-top"><span class="vv-pl">${esc(v.placa)}</span><span class="vv-n" title="Número de viajes">×${nV(v)}</span></div>
+   <div class="vv-ruta">${esc(v.ruta)}</div><div class="vv-meta">${fd(f)}${v.sinHora?'':' · 🕒 '+esc(v.salida.slice(11,16))} · 👤 ${esc(v.conductor||'Sin conductor')}</div>
+   <div class="vv-rems">${remChips(v.remision)}${tot!=null?`<span class="vv-val">${money(tot)}</span>`:''}</div></summary>
+   <div class="vv-det"><table>
+    <tr><td class="muted">Valor unitario</td><td>${isNum(v.valorUnit)?money(v.valorUnit):'—'}</td></tr>
+    <tr><td class="muted">Km estándar de la ruta</td><td>${v.kmRuta==null?'<span class="bad">⚠ sin km</span>':fmt(kmViaje(v),1)+' km'}</td></tr>
+    <tr><td class="muted">Galones aprox.</td><td>${v.kmRuta==null?'—':fmt(galViaje(v),1)+' gal'}</td></tr>
+    <tr><td class="muted">Odómetro del viaje</td><td>${o==null?'—':fmt(o)+' km'}</td></tr>
+    <tr><td class="muted">Satrack del viaje</td><td>${s==null?'—':fmt(s,1)+' km'}</td></tr>
+    <tr><td class="muted">Observación</td><td>${esc(v.observacion||'')||'—'}</td></tr>
+    <tr><td class="muted">Origen</td><td>${v.extId?'Google Sheets (aplicativo de viajes)':'Cargado a mano'}</td></tr></table>
+    <div class="row"><button class="btn sec sm" type="button" data-ev="${v.id}">Editar</button><button class="btn sec sm" type="button" data-dv="${v.id}">Borrar</button></div></div></details>`}
+function vvGrp(titulo,sub,a,max,open,col){
+  const s=vvStats(a);
+  return `<details class="vv-grp"${open?' open':''}><summary><span class="vv-gt">${titulo}</span><span class="vv-gs">${sub||''}</span><span class="vv-gn"><b>${s.n}</b> viaje${s.n===1?'':'s'}</span>${s.hay?`<span class="vv-gv">${money(s.tot)}</span>`:''}<span class="vv-gr ${s.cr===s.reg?'ok':s.cr?'warn':'none'}" title="Registros con número de remisión">🧾 ${s.cr}/${s.reg}</span><span class="vv-gb"><i style="width:${max?Math.max(4,s.n/max*100):0}%;background:${col||'var(--s1)'}"></i></span></summary><div class="vv-grid">${a.map(vvCard).join('')}</div></details>`}
+function vvDraw(){
+  const out=$('#vv-out');if(!out)return;
+  const fl=vvFiltrado(),lst=VV.dia?fl.filter(v=>(v.salida||'').slice(0,10)===VV.dia):fl;
+  /* --- Indicadores --- */
+  const st=vvStats(lst),pls=new Set(lst.map(v=>v.placa)),km=lst.reduce((x,v)=>x+(v.kmRuta==null?0:kmViaje(v)),0),sr=lst.filter(v=>String(v.remision||'').trim()).length;
+  const kp=(t,b,s)=>`<div class="kpi"><span>${t}</span><b>${b}</b><span>${s||''}</span></div>`;
+  $('#vv-kpis').innerHTML=`<div class="kpis">${kp('Viajes',fmt(st.n),st.reg+' registro'+(st.reg===1?'':'s'))}${kp('Vehículos',pls.size,'con viajes')}${kp('Con remisión',sr+' de '+st.reg,st.reg?fmt(sr/st.reg*100)+' % de los registros':'')}${kp('Valor de los viajes',st.hay?money(st.tot):'—','')}${kp('Km estándar',fmt(km),'ruta × viajes')}</div>`;
+  /* --- Gráfica: viajes por día (clic en una barra = ver solo ese día) --- */
+  const pd=new Map();fl.forEach(v=>{const f=(v.salida||'').slice(0,10);pd.set(f,(pd.get(f)||0)+nV(v))});
+  const dias=[...pd.keys()].sort().slice(-31),mx=Math.max(1,...dias.map(d=>pd.get(d)));
+  $('#vv-chart').className=dias.length>1?'vv-chart':'';
+  $('#vv-chart').innerHTML=dias.length>1?`<h4>Viajes por día · toque una barra para ver solo ese día${VV.dia?`<span class="vv-dia">${esc(fd(VV.dia))} <button type="button" id="vv-dia-x" title="Quitar filtro de día">✕</button></span>`:''}</h4><div class="vv-bars">${dias.map(d=>`<button type="button" class="vv-b${d===VV.dia?' on':''}" data-d="${d}" title="${esc(diaTxt(d))}: ${pd.get(d)} viaje(s)"><em>${pd.get(d)}</em><i style="height:${Math.max(4,pd.get(d)/mx*74)}px"></i><span>${+d.slice(8)}</span></button>`).join('')}</div>`:'';
+  $$('#vv-chart .vv-b').forEach(b=>b.onclick=()=>{VV.dia=VV.dia===b.dataset.d?'':b.dataset.d;VV.lim=40;vvDraw()});
+  const dx=$('#vv-dia-x');if(dx)dx.onclick=()=>{VV.dia='';vvDraw()};
+  /* --- Contenido según la vista --- */
+  let html='';
+  if(!lst.length)html=`<div class="vv-vacio">${S.viajes.length?'No hay viajes con esos filtros.':'Aún no hay viajes registrados. Cuando se registren en el aplicativo de viajes aparecerán aquí automáticamente.'}</div>`;
+  else if(VV.vista==='tabla')html=tablaViajes(lst,true);
+  else{
+    const gr=(kf)=>{const m=new Map();lst.forEach(v=>{const k=kf(v)||'—';if(!m.has(k))m.set(k,[]);m.get(k).push(v)});return[...m.entries()]};
+    const uniq=(a,f)=>new Set(a.map(f).filter(Boolean)).size;
+    let G;
+    if(VV.vista==='dias')G=gr(v=>(v.salida||'').slice(0,10)).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,a])=>({t:esc(diaTxt(k)),s:uniq(a,v=>v.placa)+' vehículo'+(uniq(a,v=>v.placa)===1?'':'s'),a,c:'var(--s1)'}));
+    else if(VV.vista==='placas')G=gr(v=>v.placa).map(([k,a])=>({t:`<span style="color:${colP(k)}">●</span> ${esc(k)}`,s:uniq(a,v=>v.ruta)+' ruta'+(uniq(a,v=>v.ruta)===1?'':'s'),a,c:colP(k)}));
+    else if(VV.vista==='rutas')G=gr(v=>v.ruta).map(([k,a])=>({t:esc(k),s:uniq(a,v=>v.placa)+' vehículo'+(uniq(a,v=>v.placa)===1?'':'s'),a,c:'var(--s3)'}));
+    else G=gr(v=>v.conductor||'Sin conductor').map(([k,a])=>({t:esc(k),s:uniq(a,v=>v.placa)+' vehículo'+(uniq(a,v=>v.placa)===1?'':'s'),a,c:'var(--s7)'}));
+    G.forEach(g=>g.a.sort((x,y)=>dtV(y)-dtV(x)));
+    if(VV.vista!=='dias')G.sort((x,y)=>vvStats(y.a).n-vvStats(x.a).n);
+    const max=Math.max(1,...G.map(g=>vvStats(g.a).n));
+    html=G.slice(0,VV.lim).map((g,i)=>vvGrp(g.t,g.s,g.a,max,VV.dia?true:i<(VV.vista==='dias'?3:1),g.c)).join('');
+    if(G.length>VV.lim)html+=`<div style="text-align:center"><button class="btn sec" type="button" id="vv-mas">Mostrar más (${G.length-VV.lim} restantes)</button></div>`;
+  }
+  out.innerHTML=html;
+  const mas=$('#vv-mas');if(mas)mas.onclick=()=>{VV.lim+=40;vvDraw()};
   $$('#tab-viajes [data-ev]').forEach(b=>b.onclick=()=>editarViaje(b.dataset.ev));
   $$('#tab-viajes [data-dv]').forEach(b=>b.onclick=()=>{if(confirm('¿Borrar este viaje?')){S.viajes=S.viajes.filter(x=>x.id!==b.dataset.dv);save();renderAll()}});
 }
@@ -1493,13 +1614,24 @@ function rutaAuto(R,nombre,cod,km){
   rt={id:uid(),nombre,km:km==null?null:km,galFijo:null,galVeh:{},nota:'Creada automáticamente al importar viajes de Google Sheets'+(cod?' (código '+cod+')':''),codigo:cod||'',auto:true};
   S.rutas.push(rt);R.creadas.add(nombre);if(rt.km==null)R.pendKm.add(nombre);return rt;
 }
+/* Número(s) de remisión que trae el registro de la hoja de viajes (acepta distintos nombres de campo, textos, números o listas) */
+function remDe(d){
+  const out=[],push=x=>{if(x==null)return;if(Array.isArray(x)){x.forEach(push);return}
+    if(typeof x==='object'){const k=Object.keys(x).find(k=>/^(numero|número|num|nro|remision|remisión|codigo|código|documento|valor)$/i.test(k));if(k)push(x[k]);return}
+    const s=String(x).trim();if(s&&!/^(null|undefined|n\/a|na|-|0)$/i.test(s)&&!out.includes(s))out.push(s)};
+  let ks=Object.keys(d||{}).filter(k=>/remis|tirilla|cargue/i.test(k)&&!/fecha|hora|foto|imagen|url|archivo|adjunto|obs/i.test(k));
+  const sinId=ks.filter(k=>!/id$/i.test(k));if(sinId.length)ks=sinId;
+  ks.forEach(k=>push(d[k]));
+  return out.join(', ');
+}
 function importarViajesJson(rows,hj,hojas){
   const h=rows[hj].map(norm),ij=h.indexOf('json'),ic=h.indexOf('clave'),H=hojas||{},hoja=re=>{const k=Object.keys(H).find(n=>re.test(n));return k?H[k]:null};
   const cCond=catalogoDesdeFilas(hoja(/conductor|chofer|driver/)),cRuta=catalogoDesdeFilas(hoja(/ruta/));
-  const R={nuevos:0,dup:0,act:0,vinc:0,sinRuta:0,sinFecha:0,noCat:new Set(),sinNombre:new Set(),creadas:new Set(),pendKm:new Set()},porExt=new Map(S.viajes.filter(v=>v.extId).map(v=>[v.extId,v]));
+  const R={nuevos:0,dup:0,act:0,vinc:0,sinRuta:0,sinFecha:0,noCat:new Set(),sinNombre:new Set(),creadas:new Set(),pendKm:new Set(),filas:0,conRem:0,claves:[]},porExt=new Map(S.viajes.filter(v=>v.extId).map(v=>[v.extId,v]));
   rows.slice(hj+1).forEach(r=>{
     let d;try{d=JSON.parse(r[ij])}catch(e){return}
     if(!d||typeof d!=='object')return;
+    R.filas++;const rem=remDe(d);if(rem)R.conRem++;if(!R.claves.length)R.claves=Object.keys(d);
     const ext=String(d.id||(ic>=0?r[ic]:'')||'').trim(),f=parseFecha(d.fecha),ca=parseFecha(d.createdAt);
     if(!f){R.sinFecha++;return}
     const pt=String(d.vehiculo||'').toUpperCase(),pm=pt.replace(/[\s\-]/g,'').match(/[A-Z]{3}\d{3}/),pl=pm?pm[0]:normPlaca(pt),cod=String(d.rutaCodigo||'').trim();
@@ -1508,16 +1640,16 @@ function importarViajesJson(rows,hj,hojas){
     if(!cRuta.get(cod)&&!d.ruta)R.sinNombre.add(cod);
     const rt=rutaAuto(R,rn,cod,cRuta.km.get(cod)),n=Math.max(1,Math.round(num(d.cantidad)||1)),vu=num(d.valorUnitario),
       tot=num(d.total)!=null?num(d.total):(vu!=null?Math.round(vu*n*100)/100:null),fecha=f.iso.slice(0,10),e=ext?porExt.get(ext):null;
-    const horaE=ca&&!ca.solo&&ca.iso.slice(0,10)===fecha?ca.iso.slice(11,16):'12:00',base={placa:pl,conductor:cond,ruta:rt.nombre,remision:'',nViajes:n,valorUnit:vu,total:tot,observacion:String(d.observacion||'').trim(),rutaCodigo:cod,conductorId:idc};
+    const horaE=ca&&!ca.solo&&ca.iso.slice(0,10)===fecha?ca.iso.slice(11,16):'12:00',base={placa:pl,conductor:cond,ruta:rt.nombre,remision:rem,nViajes:n,valorUnit:vu,total:tot,observacion:String(d.observacion||'').trim(),rutaCodigo:cod,conductorId:idc};
     if(e){
-      const antes=JSON.stringify([e.salida,e.placa,e.conductor,e.ruta,e.nViajes,e.valorUnit,e.total,e.observacion,e.rutaId]);
+      const antes=JSON.stringify([e.salida,e.placa,e.conductor,e.ruta,e.nViajes,e.valorUnit,e.total,e.observacion,e.remision,e.rutaId]);
       const hora=e.sinHora?horaE:(e.salida||'').slice(11,16)||horaE;
-      Object.assign(e,base,{salida:fecha+'T'+hora});
+      const prevRem=e.remision;Object.assign(e,base,{salida:fecha+'T'+hora});if(!rem)e.remision=prevRem||'';
       if(e.rutaId!==rt.id||e.kmRuta==null){e.rutaId=rt.id;e.kmRuta=rt.km}
-      JSON.stringify([e.salida,e.placa,e.conductor,e.ruta,e.nViajes,e.valorUnit,e.total,e.observacion,e.rutaId])!==antes?R.act++:R.dup++;return}
+      JSON.stringify([e.salida,e.placa,e.conductor,e.ruta,e.nViajes,e.valorUnit,e.total,e.observacion,e.remision,e.rutaId])!==antes?R.act++:R.dup++;return}
     /* si ya existe el mismo viaje cargado a mano (misma fecha, vehículo, ruta y número de viajes), se vincula en vez de duplicarlo */
     const man=S.viajes.find(x=>!x.extId&&x.salida.slice(0,10)===fecha&&x.placa===pl&&x.rutaId===rt.id&&nV(x)===n);
-    if(man){man.extId=ext;if(!man.conductor)man.conductor=cond;if(!isNum(man.valorUnit)){man.valorUnit=vu;man.total=tot}if(!man.observacion)man.observacion=base.observacion;man.rutaCodigo=cod;man.conductorId=idc;porExt.set(ext,man);R.vinc++;return}
+    if(man){man.extId=ext;if(!man.conductor)man.conductor=cond;if(!isNum(man.valorUnit)){man.valorUnit=vu;man.total=tot}if(!man.observacion)man.observacion=base.observacion;if(!man.remision&&rem)man.remision=rem;man.rutaCodigo=cod;man.conductorId=idc;porExt.set(ext,man);R.vinc++;return}
     const v=Object.assign({id:uid(),extId:ext,salida:fecha+'T'+horaE,sinHora:true,rutaId:rt.id,kmRuta:rt.km,odoIni:null,odoFin:null,satKm:null},base);
     S.viajes.push(v);if(ext)porExt.set(ext,v);R.nuevos++});
   return R;
@@ -1564,6 +1696,7 @@ function mostrarResImport(R,origen){
    +(R.sinFecha?' · '+R.sinFecha+' fila(s) sin fecha válida omitida(s)':'')+(R.sinRuta?' · '+R.sinRuta+' fila(s) sin vehículo o ruta omitida(s)':'')
    +(cr.length?'<div class="warnline" style="margin-top:6px">Rutas creadas automáticamente en Configuración → Rutas estándar ('+cr.length+'): '+cr.slice(0,15).map(esc).join(', ')+(cr.length>15?' y '+(cr.length-15)+' más':'')+'.</div>':'')
    +(pk.length?'<div class="warnline" style="margin-top:6px"><b>Falta el km estándar de '+pk.length+' ruta'+(pk.length===1?'':'s')+'</b> ('+pk.slice(0,15).map(esc).join(', ')+(pk.length>15?'…':'')+'). Escríbalos en Configuración → Rutas estándar (Editar): al guardar cada ruta, sus viajes toman los km y entran a la conciliación con los tanqueos. Mientras tanto, esos viajes no se comparan.</div>':'')
+   +(R.filas&&!R.conRem?'<div class="warnline" style="margin-top:6px"><b>Ninguno de los '+R.filas+' viajes de la hoja trae número de remisión.</b> Campos que sí trae la hoja: '+R.claves.map(esc).join(', ')+'. Si la remisión está en otro campo, dígame cuál es.</div>':'')
    +(R.sinNombre&&R.sinNombre.size?'<div class="small muted" style="margin-top:6px">No se encontró el nombre de estos códigos de ruta (se usó el código como nombre): '+[...R.sinNombre].slice(0,12).map(esc).join(', ')+'.</div>':'');
   toast(R.nuevos+' viajes importados');
 }
@@ -1571,22 +1704,72 @@ async function impViajesArchivo(file){
   let rows;try{rows=await leerTablaViajes(file)}catch(e){return toast('No se pudo leer el archivo: '+(e.message||e))}
   mostrarResImport(importarViajesFilas(rows),file.name);
 }
-async function impViajesSheets(){
-  const u=$('#v-gs-url').value.trim(),m=u.match(/\/d\/([\w-]+)/),hoja=$('#v-gs-hoja').value.trim()||'Viajes';
-  if(!m)return toast('Pegue el enlace de la hoja de Google Sheets (docs.google.com/spreadsheets/d/…)');
-  const b=$('#v-gs');b.disabled=true;$('#v-imp-res').textContent='Descargando de Google Sheets…';
+/* ---------- Sincronización AUTOMÁTICA de viajes con la hoja de Google Sheets del aplicativo de viajes ----------
+   El enlace se escribe una sola vez: queda en la configuración (S.config.viajesGs, que también viaja a Google Sheets y a los demás
+   computadores) y en este navegador. Se revisa al abrir, al volver a la pantalla, al recuperar internet y cada minuto. */
+const VG_LS='igc_viajes_gs';let vgBusy=false,vgUlt=null,vgPend=false;
+function vgCfg(){
+  let c=S.config.viajesGs;
+  if(!(c&&c.url)){try{const l=JSON.parse(localStorage.getItem(VG_LS)||'null');if(l&&l.url){c=S.config.viajesGs={url:l.url,hoja:l.hoja||'Viajes'}}}catch(e){}}
+  return c&&c.url?c:null}
+function vgGuardar(url,hoja){
+  const c={url:String(url).trim(),hoja:(String(hoja||'').trim())||'Viajes'},p=S.config.viajesGs;
+  try{localStorage.setItem(VG_LS,JSON.stringify(c))}catch(e){}
+  if(p&&p.url===c.url&&p.hoja===c.hoja)return;
+  S.config.viajesGs=c;save()}
+async function vgDescargar(url,hoja){
+  const m=String(url).match(/\/d\/([\w-]+)/);if(!m)throw new Error('El enlace no parece de una hoja de Google Sheets');
+  const g=n=>'https://docs.google.com/spreadsheets/d/'+m[1]+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(n)+'&_='+Date.now(),esHtml=t=>/^\s*<(!doctype|html)/i.test(t);
+  const r=await fetch(g(hoja));if(!r.ok)throw new Error('HTTP '+r.status);
+  const tx=await r.text();if(esHtml(tx))throw new Error('La hoja no es pública o la pestaña «'+hoja+'» no existe');
+  const hojas={};
+  await Promise.all([['conductores','Conductores'],['rutas','Rutas']].map(async([k,nom])=>{try{const rr=await fetch(g(nom));if(rr.ok){const t2=await rr.text();if(!esHtml(t2))hojas[k]=parseCSV(t2)}}catch(e){}}));
+  return{rows:parseCSV(tx),hojas}}
+const vgEditando=()=>{const a=document.activeElement;return !!(a&&((a.id==='vv-q')||(/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.closest('form'))))};
+async function autoViajes(manual){
+  const c=vgCfg();
+  if(!c){vgEstado();return}
+  if(vgPend&&!manual&&!vgEditando()){vgPend=false;renderAll()}
+  if(vgBusy)return;
+  if(!manual){if(document.hidden||document.body.classList.contains('locked'))return;if(CL.url&&!pulled)return}
+  vgBusy=true;vgEstado();
   try{
-    const r=await fetch('https://docs.google.com/spreadsheets/d/'+m[1]+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(hoja));
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const tx=await r.text();if(/^\s*<(!doctype|html)/i.test(tx))throw new Error('La hoja no es pública o la pestaña «'+hoja+'» no existe');
-    const hojas={};
-    for(const [k,nom] of [['conductores','Conductores'],['rutas','Rutas']]){
-      try{const rr=await fetch('https://docs.google.com/spreadsheets/d/'+m[1]+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(nom));
-        if(rr.ok){const t2=await rr.text();if(!/^\s*<(!doctype|html)/i.test(t2))hojas[k]=parseCSV(t2)}}catch(e){}}
-    mostrarResImport(importarViajesFilas(parseCSV(tx),hojas),'Google Sheets («'+hoja+'»)');
-  }catch(e){$('#v-imp-res').innerHTML='<span class="bad">No se pudo traer la hoja: '+esc(e.message||String(e))+'. Compártala como «Cualquier persona con el enlace puede ver» o descárguela como Excel e impórtela con el botón de arriba.</span>'}
-  finally{b.disabled=false}
+    const d=await vgDescargar(c.url,c.hoja),R=importarViajesFilas(d.rows,d.hojas);
+    if(R.err)throw new Error(R.err);
+    const cambio=R.nuevos+R.act+R.vinc+(R.creadas?R.creadas.size:0),prev=vgUlt&&vgUlt.cambio||'';
+    vgUlt={t:Date.now(),err:'',R,cambio:cambio?(R.nuevos?R.nuevos+' nuevo'+(R.nuevos===1?'':'s'):'')+(R.act?(R.nuevos?' · ':'')+R.act+' actualizado'+(R.act===1?'':'s'):'')+(!R.nuevos&&!R.act&&R.vinc?R.vinc+' vinculado'+(R.vinc===1?'':'s'):''):prev};
+    if(manual)mostrarResImport(R,'Google Sheets («'+c.hoja+'»)');
+    else if(cambio){save();if(vgEditando())vgPend=true;else renderAll()}
+  }catch(e){
+    vgUlt={t:Date.now(),err:e.message||String(e),cambio:vgUlt&&vgUlt.cambio||''};
+    if(manual){const el=$('#v-imp-res');if(el)el.innerHTML='<span class="bad">No se pudo traer la hoja: '+esc(vgUlt.err)+'. Compártala como «Cualquier persona con el enlace puede ver» o descárguela como Excel e impórtela con el botón de arriba.</span>'}}
+  finally{vgBusy=false;vgEstado()}
 }
+function vgEstado(){
+  const el=$('#v-gs-estado');if(!el)return;
+  const c=vgCfg(),u=$('#v-gs-url'),hh=$('#v-gs-hoja');
+  if(c){if(u&&document.activeElement!==u&&!u.value)u.value=c.url;if(hh&&document.activeElement!==hh)hh.value=c.hoja}
+  let cls,html;
+  if(!c){cls='warn';html='<b>Sincronización automática sin configurar.</b> Pegue el enlace de la hoja de viajes una sola vez (en «Enlace de la hoja de viajes», abajo) y quedará activa en todos los computadores.'}
+  else if(vgBusy){cls='na';html='⏳ Sincronizando viajes con Google Sheets…'}
+  else if(vgUlt&&vgUlt.err){cls='crit';html='<b>No se pudo sincronizar los viajes:</b> '+esc(vgUlt.err)+'. Verifique que la hoja esté compartida como «Cualquier persona con el enlace puede ver». Se reintenta solo cada minuto.'}
+  else{cls='ok';const R=vgUlt&&vgUlt.R,hora=vgUlt?new Date(vgUlt.t).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'';
+    html='✅ <b>Sincronización automática activa.</b> '+(vgUlt?'Última revisión: '+hora+(vgUlt.cambio?' · último cambio: '+vgUlt.cambio:' · sin viajes nuevos'):'Esperando la primera revisión…')+' <span class="muted small">Se revisa cada minuto y al volver a esta pantalla.</span>'
+      +(R&&R.filas&&!R.conRem?'<div class="warnline"><b>⚠ Los viajes de la hoja no traen número de remisión.</b> Campos que trae la hoja: '+R.claves.map(esc).join(', ')+'.</div>':'')}
+  el.className='banner '+cls+' vg-estado';el.innerHTML=html;
+  const det=$('#v-gs-det');if(det&&!c)det.open=true}
+async function impViajesSheets(){
+  const u=$('#v-gs-url').value.trim(),hoja=$('#v-gs-hoja').value.trim()||'Viajes';
+  if(!/\/d\/[\w-]+/.test(u))return toast('Pegue el enlace de la hoja de Google Sheets (docs.google.com/spreadsheets/d/…)');
+  vgGuardar(u,hoja);$('#v-imp-res').textContent='Descargando de Google Sheets…';await autoViajes(true)}
+function vgInit(){
+  const u=$('#v-gs-url'),hh=$('#v-gs-hoja');
+  if(u)u.onchange=()=>{if(/\/d\/[\w-]+/.test(u.value))impViajesSheets()};
+  if(hh)hh.onchange=()=>{if(/\/d\/[\w-]+/.test(u.value))impViajesSheets()};
+  setInterval(()=>autoViajes(),60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)autoViajes()});
+  window.addEventListener('online',()=>autoViajes());
+  setTimeout(()=>autoViajes(),2500);vgEstado()}
 function exportarViajes(){
   const vs=[...S.viajes].sort((a,b)=>dtV(a)-dtV(b)),hoy=isoD(Date.now());
   const aoa=[VIAJES_COLS].concat(vs.map(v=>[v.salida.slice(0,10),v.salida.slice(11,16),v.conductor||'',v.placa,v.ruta,v.remision||'',nV(v),isNum(v.valorUnit)?Number(v.valorUnit):'',totalV(v)==null?'':totalV(v),v.observacion||'']));
@@ -2103,7 +2286,7 @@ async function pull(opt){opt=opt||{};
    if(JSON.stringify(nS)!==JSON.stringify(S)){S=nS;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}renderAll();renderCloudCfg()}}
   pulled=true;lastPull=Date.now();setSync('● Sincronizado con Google Sheets','#4cc27e');
   if(!has&&COLS.some(k=>S[k].length))push();
-  setTimeout(()=>syncFotos(),1500)}
+  setTimeout(()=>syncFotos(),1500);setTimeout(()=>autoViajes(),700)}
  catch(e){setSync(opt.silent?'● Sin conexión con Sheets (se reintentará) — clic aquí para diagnosticar':'● Sin conexión con Sheets: '+e.message+' — clic aquí para diagnosticar',opt.silent?'#f0b43c':'#ff7b80')}}
 /* Refresco automático: al volver a la pestaña/app y cada 2 minutos, si no hay cambios locales pendientes ni un formulario en edición */
 function autoRefresh(){if(!CL.url||!pulled||document.hidden||pushT||localStorage.getItem(DK)||Date.now()-lastPull<30000)return;const a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.closest('form'))return;pull({silent:true})}
@@ -3272,7 +3455,7 @@ $('#sat-placa').onchange=renderSatrack;
 $('#m-mes').onchange=renderMensual;$('#m-vista').onchange=renderMensual;
 $('#g-mes').onchange=renderGerencial;$('#g-placa').onchange=renderGerencial;
 $$('.sel-base').forEach(s=>s.onchange=()=>{S.config.baseKm=s.value;save();renderAll()});
-bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();satLiveWire();satPdfWire();
+bindConfig();bindRutas();bindConductores();limpiarFormTanqueo();renderAll();initExtra();satLiveWire();satPdfWire();vgInit();
 </script>
 <script type="text/plain" id="gs-correo">
 /**
