@@ -314,7 +314,7 @@ details.man{margin-top:12px}details.man summary{cursor:pointer;color:var(--brand
       <div style="min-width:140px;flex:1"><label>Nombre de la pestaña</label><input id="v-gs-hoja" value="Viajes"></div>
       <button class="btn" type="button" id="v-gs">Guardar y sincronizar</button>
     </div>
-    <p class="muted small" style="margin:6px 0 0">El enlace queda guardado en la configuración de este aplicativo (y en Google Sheets, así que también queda en los demás computadores). Desde ahí, cada viaje que se registre en el aplicativo de viajes aparece aquí solo, sin volver a pulsar nada. La hoja debe estar compartida como «Cualquier persona con el enlace puede ver».</p></details>
+    <p class="muted small" style="margin:6px 0 0">El enlace queda guardado en la configuración de este aplicativo (y en Google Sheets, así que también queda en los demás computadores). Desde ahí, cada viaje que se registre en el aplicativo de viajes aparece aquí solo, y si elimina un viaje allá también se elimina aquí, sin pulsar nada. La hoja debe estar compartida como «Cualquier persona con el enlace puede ver».</p></details>
     <div id="v-imp-res" class="small" style="margin-top:8px"></div>
   </div>
   <div class="card">
@@ -1627,13 +1627,13 @@ function remDe(d){
 function importarViajesJson(rows,hj,hojas){
   const h=rows[hj].map(norm),ij=h.indexOf('json'),ic=h.indexOf('clave'),H=hojas||{},hoja=re=>{const k=Object.keys(H).find(n=>re.test(n));return k?H[k]:null};
   const cCond=catalogoDesdeFilas(hoja(/conductor|chofer|driver/)),cRuta=catalogoDesdeFilas(hoja(/ruta/));
-  const R={nuevos:0,dup:0,act:0,vinc:0,sinRuta:0,sinFecha:0,noCat:new Set(),sinNombre:new Set(),creadas:new Set(),pendKm:new Set(),filas:0,conRem:0,claves:[]},porExt=new Map(S.viajes.filter(v=>v.extId).map(v=>[v.extId,v]));
+  const R={nuevos:0,dup:0,act:0,vinc:0,sinRuta:0,sinFecha:0,noCat:new Set(),sinNombre:new Set(),creadas:new Set(),pendKm:new Set(),filas:0,conRem:0,claves:[],ids:new Set()},porExt=new Map(S.viajes.filter(v=>v.extId).map(v=>[v.extId,v]));
   rows.slice(hj+1).forEach(r=>{
     let d;try{d=JSON.parse(r[ij])}catch(e){return}
     if(!d||typeof d!=='object')return;
     R.filas++;const rem=remDe(d);if(rem)R.conRem++;if(!R.claves.length)R.claves=Object.keys(d);
     const ext=String(d.id||(ic>=0?r[ic]:'')||'').trim(),f=parseFecha(d.fecha),ca=parseFecha(d.createdAt);
-    if(!f){R.sinFecha++;return}
+    if(ext)R.ids.add(ext);if(!f){R.sinFecha++;return}
     const pt=String(d.vehiculo||'').toUpperCase(),pm=pt.replace(/[\s\-]/g,'').match(/[A-Z]{3}\d{3}/),pl=pm?pm[0]:normPlaca(pt),cod=String(d.rutaCodigo||'').trim();
     if(!pl||!(cod||d.ruta)){R.sinRuta++;return}
     const rn=String(d.ruta||cRuta.get(cod)||cod).trim(),idc=String(d.conductorId||'').trim(),cond=String(d.conductor||cCond.get(idc)||idc).trim();
@@ -1692,7 +1692,7 @@ function mostrarResImport(R,origen){
   const cr=[...(R.creadas||[])],pk=[...(R.pendKm||[])];
   el.innerHTML='<b>'+esc(origen)+':</b> '+R.nuevos+' viaje'+(R.nuevos===1?'':'s')+' importado'+(R.nuevos===1?'':'s')
    +(R.vinc?' · '+R.vinc+' vinculado'+(R.vinc===1?'':'s')+' con viajes ya cargados a mano (no se duplicaron)':'')
-   +(R.act?' · '+R.act+' actualizado'+(R.act===1?'':'s'):'')+(R.dup?' · '+R.dup+' sin cambios':'')
+   +(R.act?' · '+R.act+' actualizado'+(R.act===1?'':'s'):'')+(R.borr?' · '+R.borr+' eliminado'+(R.borr===1?'':'s')+' (ya no están en la hoja de viajes)':'')+(R.dup?' · '+R.dup+' sin cambios':'')
    +(R.sinFecha?' · '+R.sinFecha+' fila(s) sin fecha válida omitida(s)':'')+(R.sinRuta?' · '+R.sinRuta+' fila(s) sin vehículo o ruta omitida(s)':'')
    +(cr.length?'<div class="warnline" style="margin-top:6px">Rutas creadas automáticamente en Configuración → Rutas estándar ('+cr.length+'): '+cr.slice(0,15).map(esc).join(', ')+(cr.length>15?' y '+(cr.length-15)+' más':'')+'.</div>':'')
    +(pk.length?'<div class="warnline" style="margin-top:6px"><b>Falta el km estándar de '+pk.length+' ruta'+(pk.length===1?'':'s')+'</b> ('+pk.slice(0,15).map(esc).join(', ')+(pk.length>15?'…':'')+'). Escríbalos en Configuración → Rutas estándar (Editar): al guardar cada ruta, sus viajes toman los km y entran a la conciliación con los tanqueos. Mientras tanto, esos viajes no se comparan.</div>':'')
@@ -1726,6 +1726,16 @@ async function vgDescargar(url,hoja){
   await Promise.all([['conductores','Conductores'],['rutas','Rutas']].map(async([k,nom])=>{try{const rr=await fetch(g(nom));if(rr.ok){const t2=await rr.text();if(!esHtml(t2))hojas[k]=parseCSV(t2)}}catch(e){}}));
   return{rows:parseCSV(tx),hojas}}
 const vgEditando=()=>{const a=document.activeElement;return !!(a&&((a.id==='vv-q')||(/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.closest('form'))))};
+/* Espejo de eliminaciones: si un viaje que vino de la hoja de viajes ya no está en ella, se elimina también aquí.
+   Protección: si faltaran más de la mitad de los viajes sincronizados (y más de 5), no se borra hasta que la siguiente revisión lo confirme,
+   para no perder datos por una descarga incompleta de Google Sheets. */
+let vgSig='';
+function vgPurgar(R){
+  if(!R.ids)return 0;
+  const sync=S.viajes.filter(v=>v.extId),falt=sync.filter(v=>!R.ids.has(String(v.extId)));
+  if(!falt.length){vgSig='';return 0}
+  if(falt.length>Math.max(5,sync.length*0.5)){const sig=falt.map(v=>String(v.extId)).sort().join('|');if(sig!==vgSig){vgSig=sig;return 0}}
+  vgSig='';const ids=new Set(falt.map(v=>v.id));S.viajes=S.viajes.filter(v=>!ids.has(v.id));return falt.length}
 async function autoViajes(manual){
   const c=vgCfg();
   if(!c){vgEstado();return}
@@ -1736,8 +1746,10 @@ async function autoViajes(manual){
   try{
     const d=await vgDescargar(c.url,c.hoja),R=importarViajesFilas(d.rows,d.hojas);
     if(R.err)throw new Error(R.err);
-    const cambio=R.nuevos+R.act+R.vinc+(R.creadas?R.creadas.size:0),prev=vgUlt&&vgUlt.cambio||'';
-    vgUlt={t:Date.now(),err:'',R,cambio:cambio?(R.nuevos?R.nuevos+' nuevo'+(R.nuevos===1?'':'s'):'')+(R.act?(R.nuevos?' · ':'')+R.act+' actualizado'+(R.act===1?'':'s'):'')+(!R.nuevos&&!R.act&&R.vinc?R.vinc+' vinculado'+(R.vinc===1?'':'s'):''):prev};
+    R.borr=vgPurgar(R);
+    const cambio=R.nuevos+R.act+R.vinc+R.borr+(R.creadas?R.creadas.size:0),prev=vgUlt&&vgUlt.cambio||'';
+    const partes=[R.nuevos?R.nuevos+' nuevo'+(R.nuevos===1?'':'s'):'',R.act?R.act+' actualizado'+(R.act===1?'':'s'):'',(!R.nuevos&&!R.act&&R.vinc)?R.vinc+' vinculado'+(R.vinc===1?'':'s'):'',R.borr?R.borr+' eliminado'+(R.borr===1?'':'s'):''].filter(Boolean);
+    vgUlt={t:Date.now(),err:'',R,cambio:partes.length?partes.join(' · '):prev};
     if(manual)mostrarResImport(R,'Google Sheets («'+c.hoja+'»)');
     else if(cambio){save();if(vgEditando())vgPend=true;else renderAll()}
   }catch(e){
